@@ -1,0 +1,166 @@
+IF(NOT DEFINED FPU)  
+    SET(FPU "-mfloat-abi=hard -mfpu=fpv5-d16")  
+ENDIF()  
+
+IF(NOT DEFINED SPECS)  
+    SET(SPECS "--specs=nano.specs --specs=nosys.specs")  
+ENDIF()  
+
+IF(NOT DEFINED DEBUG_CONSOLE_CONFIG)  
+    SET(DEBUG_CONSOLE_CONFIG "-DSDK_DEBUGCONSOLE=1")  
+ENDIF()  
+
+SET(CMAKE_ASM_FLAGS_DDR_DEBUG " \
+    ${CMAKE_ASM_FLAGS_DDR_DEBUG} \
+    -D__STARTUP_INITIALIZE_NONCACHEDATA \
+    -D__STARTUP_CLEAR_BSS \
+    -DMCUXPRESSO_SDK \
+    -DCPU_MIMX8MN6DVTJZ_cm7 \
+    -DMIMX8MN6_cm7_SERIES \
+    -g \
+    -mthumb \
+    -mcpu=cortex-m7 \
+    ${FPU} \
+")
+SET(CMAKE_ASM_FLAGS_DDR_RELEASE " \
+    ${CMAKE_ASM_FLAGS_DDR_RELEASE} \
+    -D__STARTUP_INITIALIZE_NONCACHEDATA \
+    -D__STARTUP_CLEAR_BSS \
+    -DMCUXPRESSO_SDK \
+    -DCPU_MIMX8MN6DVTJZ_cm7 \
+    -DMIMX8MN6_cm7_SERIES \
+    -mthumb \
+    -mcpu=cortex-m7 \
+    ${FPU} \
+")
+SET(CMAKE_C_FLAGS_DDR_DEBUG " \
+    ${CMAKE_C_FLAGS_DDR_DEBUG} \
+    -include ${ProjDirPath}/../mcux_config.h \
+    -D__STARTUP_CLEAR_BSS \
+    -DMCUX_META_BUILD \
+    -DMCUXPRESSO_SDK \
+    -DVDEV0_VRING_BASE=0xB8000000U \
+    -DCPU_MIMX8MN6DVTJZ_cm7 \
+    -DMIMX8MN6_cm7_SERIES \
+    -DSDK_I2C_BASED_COMPONENT_USED=1 \
+    -DCODEC_MULTI_ADAPTERS=1 \
+    -DCODEC_WM8524_ENABLE \
+    -g \
+    -O0 \
+    -Wall \
+    -fno-common \
+    -ffunction-sections \
+    -fdata-sections \
+    -fno-builtin \
+    -mthumb \
+    -mapcs \
+    -std=gnu99 \
+    -mcpu=cortex-m7 \
+    ${FPU} \
+    ${DEBUG_CONSOLE_CONFIG} \
+")
+SET(CMAKE_C_FLAGS_DDR_RELEASE " \
+    ${CMAKE_C_FLAGS_DDR_RELEASE} \
+    -include ${ProjDirPath}/../mcux_config.h \
+    -D__STARTUP_CLEAR_BSS \
+    -DMCUX_META_BUILD \
+    -DMCUXPRESSO_SDK \
+    -DVDEV0_VRING_BASE=0xB8000000U \
+    -DCPU_MIMX8MN6DVTJZ_cm7 \
+    -DMIMX8MN6_cm7_SERIES \
+    -DSDK_I2C_BASED_COMPONENT_USED=1 \
+    -DCODEC_MULTI_ADAPTERS=1 \
+    -DCODEC_WM8524_ENABLE \
+    -Os \
+    -Wall \
+    -fno-common \
+    -ffunction-sections \
+    -fdata-sections \
+    -fno-builtin \
+    -mthumb \
+    -mapcs \
+    -std=gnu99 \
+    -mcpu=cortex-m7 \
+    ${FPU} \
+    ${DEBUG_CONSOLE_CONFIG} \
+")
+SET(CMAKE_CXX_FLAGS_DDR_DEBUG " \
+    ${CMAKE_CXX_FLAGS_DDR_DEBUG} \
+    -DMCUX_META_BUILD \
+    -DMCUXPRESSO_SDK \
+    -DCPU_MIMX8MN6DVTJZ_cm7 \
+    -DMIMX8MN6_cm7_SERIES \
+    -g \
+    -O0 \
+    -Wall \
+    -fno-common \
+    -ffunction-sections \
+    -fdata-sections \
+    -fno-builtin \
+    -mthumb \
+    -mapcs \
+    -fno-rtti \
+    -fno-exceptions \
+    -mcpu=cortex-m7 \
+    ${FPU} \
+    ${DEBUG_CONSOLE_CONFIG} \
+")
+SET(CMAKE_CXX_FLAGS_DDR_RELEASE " \
+    ${CMAKE_CXX_FLAGS_DDR_RELEASE} \
+    -DMCUX_META_BUILD \
+    -DMCUXPRESSO_SDK \
+    -DCPU_MIMX8MN6DVTJZ_cm7 \
+    -DMIMX8MN6_cm7_SERIES \
+    -Os \
+    -Wall \
+    -fno-common \
+    -ffunction-sections \
+    -fdata-sections \
+    -fno-builtin \
+    -mthumb \
+    -mapcs \
+    -fno-rtti \
+    -fno-exceptions \
+    -mcpu=cortex-m7 \
+    ${FPU} \
+    ${DEBUG_CONSOLE_CONFIG} \
+")
+SET(CMAKE_EXE_LINKER_FLAGS_DDR_DEBUG " \
+    ${CMAKE_EXE_LINKER_FLAGS_DDR_DEBUG} \
+    -g \
+    -Xlinker \
+    -Map=output.map \
+    -Wall \
+    -fno-common \
+    -ffunction-sections \
+    -fdata-sections \
+    -fno-builtin \
+    -mthumb \
+    -mapcs \
+    -Wl,--gc-sections \
+    -Wl,-static \
+    -Wl,--print-memory-usage \
+    -mcpu=cortex-m7 \
+    ${FPU} \
+    ${SPECS} \
+    -T\"${ProjDirPath}/MIMX8MN6xxxJZ_ddr_ram.ld\" -static \
+")
+SET(CMAKE_EXE_LINKER_FLAGS_DDR_RELEASE " \
+    ${CMAKE_EXE_LINKER_FLAGS_DDR_RELEASE} \
+    -Xlinker \
+    -Map=output.map \
+    -Wall \
+    -fno-common \
+    -ffunction-sections \
+    -fdata-sections \
+    -fno-builtin \
+    -mthumb \
+    -mapcs \
+    -Wl,--gc-sections \
+    -Wl,-static \
+    -Wl,--print-memory-usage \
+    -mcpu=cortex-m7 \
+    ${FPU} \
+    ${SPECS} \
+    -T\"${ProjDirPath}/MIMX8MN6xxxJZ_ddr_ram.ld\" -static \
+")
