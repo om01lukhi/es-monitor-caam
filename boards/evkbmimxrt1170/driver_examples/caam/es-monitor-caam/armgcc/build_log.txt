@@ -1,0 +1,49 @@
+[  7%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/boards/evkbmimxrt1170/driver_examples/caam/cm7/pin_mux.c.obj
+[  7%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/boards/evkbmimxrt1170/driver_examples/caam/cm7/dcd.c.obj
+[ 14%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/boards/evkbmimxrt1170/driver_examples/caam/cm7/clock_config.c.obj
+[ 14%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/utilities/debug_console_lite/fsl_debug_console.c.obj
+[ 18%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/boards/evkbmimxrt1170/driver_examples/caam/cm7/board.c.obj
+[ 22%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/boards/evkbmimxrt1170/driver_examples/caam/cm7/caam.c.obj
+[ 25%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/components/uart/fsl_adapter_lpuart.c.obj
+[ 29%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/utilities/str/fsl_str.c.obj
+[ 33%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/drivers/fsl_common.c.obj
+[ 44%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/utilities/debug_console_lite/fsl_assert.c.obj
+[ 44%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/xip/fsl_flexspi_nor_boot.c.obj
+[ 44%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/components/lists/fsl_component_generic_list.c.obj
+[ 51%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/boards/evkbmimxrt1170/xip/evkbmimxrt1170_flexspi_nor_config.c.obj
+[ 51%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/drivers/fsl_common_arm.c.obj
+[ 55%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/drivers/fsl_clock.c.obj
+[ 59%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/drivers/fsl_anatop_ai.c.obj
+[ 62%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/drivers/fsl_caam.c.obj
+[ 66%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/drivers/fsl_lpuart.c.obj
+[ 70%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/drivers/fsl_gpio.c.obj
+[ 74%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/drivers/fsl_pmu.c.obj
+[ 77%] Building ASM object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/gcc/startup_MIMXRT1176_cm7.S.obj
+[ 81%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/system_MIMXRT1176_cm7.c.obj
+[ 85%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/drivers/cm7/fsl_cache.c.obj
+[ 88%] Building ASM object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/utilities/fsl_memcpy.S.obj
+[ 92%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/utilities/fsl_sbrk.c.obj
+[ 96%] Building C object CMakeFiles/caam_cm7.elf.dir/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/devices/MIMXRT1176/drivers/fsl_dcdc.c.obj
+[100%] Linking C executable flexspi_nor_debug/caam_cm7.elf
+/usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/bin/ld: /usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-closer.o): in function `_close_r':
+/build/newlib-Ipb6mw/newlib-4.6.0.20260123/build_nano/arm-none-eabi/thumb/v7e-m+dp/hard/newlib/../../../../../../newlib/libc/reent/closer.c:47:(.text+0xc): warning: _close is not implemented and will always fail
+/usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/bin/ld: /usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-closer.o): note: the message above does not take linker garbage collection into account
+/usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/bin/ld: /usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-lseekr.o): in function `_lseek_r':
+/build/newlib-Ipb6mw/newlib-4.6.0.20260123/build_nano/arm-none-eabi/thumb/v7e-m+dp/hard/newlib/../../../../../../newlib/libc/reent/lseekr.c:49:(.text+0x14): warning: _lseek is not implemented and will always fail
+/usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/bin/ld: /usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-lseekr.o): note: the message above does not take linker garbage collection into account
+/usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/bin/ld: /usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-readr.o): in function `_read_r':
+/build/newlib-Ipb6mw/newlib-4.6.0.20260123/build_nano/arm-none-eabi/thumb/v7e-m+dp/hard/newlib/../../../../../../newlib/libc/reent/readr.c:49:(.text+0x14): warning: _read is not implemented and will always fail
+/usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/bin/ld: /usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-readr.o): note: the message above does not take linker garbage collection into account
+/usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/bin/ld: /usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-writer.o): in function `_write_r':
+/build/newlib-Ipb6mw/newlib-4.6.0.20260123/build_nano/arm-none-eabi/thumb/v7e-m+dp/hard/newlib/../../../../../../newlib/libc/reent/writer.c:49:(.text+0x14): warning: _write is not implemented and will always fail
+/usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/bin/ld: /usr/lib/gcc/arm-none-eabi/14.2.1/../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-writer.o): note: the message above does not take linker garbage collection into account
+Memory region         Used Size  Region Size  %age Used
+  m_flash_config:         512 B         3 KB     16.67%
+           m_ivt:          48 B         4 KB      1.17%
+    m_interrupts:          1 KB         1 KB    100.00%
+          m_text:       45016 B     65271 KB      0.07%
+          m_data:        5160 B       256 KB      1.97%
+         m_data2:         196 B       512 KB      0.04%
+    rpmsg_sh_mem:           0 B          0 B
+   m_core1_image:           0 B       256 KB      0.00%
+[100%] Built target caam_cm7.elf

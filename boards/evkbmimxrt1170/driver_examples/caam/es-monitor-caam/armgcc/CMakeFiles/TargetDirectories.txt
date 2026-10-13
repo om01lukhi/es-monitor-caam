@@ -1,0 +1,3 @@
+/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/boards/evkbmimxrt1170/driver_examples/caam/cm7/armgcc/CMakeFiles/caam_cm7.elf.dir
+/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/boards/evkbmimxrt1170/driver_examples/caam/cm7/armgcc/CMakeFiles/edit_cache.dir
+/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/boards/evkbmimxrt1170/driver_examples/caam/cm7/armgcc/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/hdd1/work/evident-scientific/04_workspace/MCUXpresso_SDK/boards/evkbmimxrt1170/driver_examples/caam/cm7/armgcc/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -1,0 +1,8 @@
+{
+  "version": "25.3",
+  "toolchainPath": "/usr/local/mcuxpressoide-25.6.136/ide/tools",
+  "linkedProjects": [],
+  "trustZoneType": "none",
+  "multicoreType": "none",
+  "projectType": "cmake-freestanding"
+}
