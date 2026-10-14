@@ -16,6 +16,12 @@
 #include "clock_config.h"
 #include "board.h"
 #include "fsl_caam.h"
+#include "ff.h"
+#include "diskio.h"
+#include "fsl_sd.h"
+#include "fsl_sd_disk.h"
+#include "sdmmc_config.h"
+#include "stdlib.h"
 
 #include <string.h>
 
@@ -706,6 +712,58 @@ static void RunCrcExamples(CAAM_Type *base, caam_handle_t *handle)
     PRINTF(" done successfully.\r\n\r\n");
 }
 
+#define FS_FILE_BUF_SIZE (1024U)
+
+static FATFS s_fileSystem;
+
+/* Size multiple of the cache line, address aligned for USDHC DMA + D-cache */
+SDK_ALIGN(static uint8_t s_fileBuf[FS_FILE_BUF_SIZE], BOARD_SDMMC_DATA_BUFFER_ALIGN_SIZE);
+
+static status_t FS_Mount(void)
+{
+    const TCHAR drive[3U] = {SDDISK + '0', ':', '/'};
+
+    BOARD_SD_Config(&g_sd, NULL, BOARD_SDMMC_SD_HOST_IRQ_PRIORITY, NULL);
+
+    if (SD_HostInit(&g_sd) != kStatus_Success)
+    {
+        return kStatus_Fail;
+    }
+    if (SD_PollingCardInsert(&g_sd, kSD_Inserted) != kStatus_Success)
+    {
+        return kStatus_Fail;
+    }
+    SD_SetCardPower(&g_sd, false);
+    SD_SetCardPower(&g_sd, true);
+
+    if (f_mount(&s_fileSystem, drive, 0U) != FR_OK)
+    {
+        return kStatus_Fail;
+    }
+#if (FF_FS_RPATH >= 2U)
+    if (f_chdrive(drive) != FR_OK)
+    {
+        return kStatus_Fail;
+    }
+#endif
+    return kStatus_Success;
+}
+
+/* buf must be aligned to BOARD_SDMMC_DATA_BUFFER_ALIGN_SIZE; bufSize is a multiple of it */
+static status_t FS_ReadFile(const char *path, uint8_t *buf, int bufSize, int* bytesRead)
+{
+    FIL file;
+
+    if (f_open(&file, path, FA_READ) != FR_OK)
+    {
+        return kStatus_Fail;
+    }
+    FRESULT res = f_read(&file, buf, bufSize, bytesRead);
+    (void)f_close(&file);
+
+    return (res == FR_OK) ? kStatus_Success : kStatus_Fail;
+}
+
 /*!
  * @brief Main function.
  */
@@ -721,6 +779,24 @@ int main(void)
     BOARD_BootClockRUN();
     BOARD_InitDebugConsole();
 
+    int n = 0U;
+    if (FS_Mount() != kStatus_Success)
+    {
+        PRINTF("SD mount failed\r\n");
+    }
+    else if (FS_ReadFile("/test.bin", s_fileBuf, FS_FILE_BUF_SIZE, &n) != kStatus_Success)
+    {
+        PRINTF("Read failed\r\n");
+    }
+    else
+    {
+        PRINTF("Read %u bytes\r\n", (unsigned)n);
+    }
+    for (int i = 0U; i < 16U && i < n; i++)
+    {
+        PRINTF("%02x ", (unsigned)s_fileBuf[i]);
+    }
+    PRINTF("\r\n");
     /* Get default configuration. */
     CAAM_GetDefaultConfig(&caamConfig);
 

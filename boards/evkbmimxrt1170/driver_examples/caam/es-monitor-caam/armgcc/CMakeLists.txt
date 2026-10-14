@@ -47,6 +47,9 @@ add_executable(${MCUX_SDK_PROJECT_NAME}
 "${ProjDirPath}/../dcd.c"
 "${ProjDirPath}/../dcd.h"
 "${ProjDirPath}/../evkbmimxrt1170_connect_cm4_cm7side.jlinkscript"
+"${ProjDirPath}/../ffconf.h"
+"${ProjDirPath}/../sdmmc_config.c"
+"${ProjDirPath}/../sdmmc_config.h"
 )
 
 target_include_directories(${MCUX_SDK_PROJECT_NAME} PRIVATE
@@ -64,6 +67,10 @@ set(CMAKE_MODULE_PATH
     ${SdkRootDirPath}/boards/evkbmimxrt1170/xip
     ${SdkRootDirPath}/devices/MIMXRT1176/drivers/cm7
     ${SdkRootDirPath}/CMSIS/Core/Include
+    ${SdkRootDirPath}/middleware/sdmmc
+    ${SdkRootDirPath}/middleware/fatfs
+    ${SdkRootDirPath}/components/gpio
+    ${SdkRootDirPath}/components/osa
 )
 
 # include modules
@@ -111,6 +118,16 @@ include(utilities_misc_utilities_MIMXRT1176_cm7)
 
 include(device_MIMXRT1176_system_MIMXRT1176_cm7)
 
+include(driver_usdhc_MIMXRT1176_cm7)
+include(middleware_sdmmc_sd_MIMXRT1176_cm7)
+include(middleware_sdmmc_common_MIMXRT1176_cm7)
+include(middleware_sdmmc_host_usdhc_MIMXRT1176_cm7)
+include(middleware_sdmmc_host_usdhc_interrupt_MIMXRT1176_cm7)
+include(component_igpio_adapter_MIMXRT1176_cm7)
+include(middleware_fatfs_MIMXRT1176_cm7)
+include(middleware_fatfs_sd_MIMXRT1176_cm7)
+include(middleware_sdmmc_osa_bm_MIMXRT1176_cm7)
+include(component_osa_bm_MIMXRT1176_cm7)
 
 IF(NOT DEFINED TARGET_LINK_SYSTEM_LIBRARIES)  
     SET(TARGET_LINK_SYSTEM_LIBRARIES "-lm -lc -lgcc -lnosys")  
