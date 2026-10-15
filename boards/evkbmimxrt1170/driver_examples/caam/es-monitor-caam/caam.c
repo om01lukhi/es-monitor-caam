@@ -22,6 +22,7 @@
 #include "fsl_sd_disk.h"
 #include "sdmmc_config.h"
 #include "stdlib.h"
+#include "stdint.h"
 
 #include <string.h>
 
@@ -712,7 +713,7 @@ static void RunCrcExamples(CAAM_Type *base, caam_handle_t *handle)
     PRINTF(" done successfully.\r\n\r\n");
 }
 
-#define FS_FILE_BUF_SIZE (1024U)
+#define FS_FILE_BUF_SIZE (sizeof(s_Cbc256CipherExpected))
 
 static FATFS s_fileSystem;
 
@@ -780,6 +781,76 @@ static status_t FS_WriteFile(const char *path, const uint8_t *buf, int size)
     return ((res == FR_OK) && (cres == FR_OK) && (written == size)) ? kStatus_Success : kStatus_Fail;
 }
 
+#define FS_MAX_FILE_SIZE (64U * 1024U) /* limit: must fit in heap, see below */
+#define FS_ALIGN         (BOARD_SDMMC_DATA_BUFFER_ALIGN_SIZE)
+
+typedef struct
+{
+    uint8_t *data; /* aligned, use this */
+    UINT size;     /* file size in bytes */
+    void *raw;     /* pointer returned by malloc, for free() */
+} fs_file_buf_t;
+
+static void FS_FreeFileBuf(fs_file_buf_t *fb)
+{
+    free(fb->raw);
+    fb->raw  = NULL;
+    fb->data = NULL;
+    fb->size = 0U;
+}
+
+/* On success: fb->data holds fb->size bytes. Caller must call FS_FreeFileBuf(). */
+static status_t FS_ReadFileAlloc(const char *path, fs_file_buf_t *fb)
+{
+    FIL file;
+    UINT br = 0U;
+
+    fb->data = NULL;
+    fb->raw  = NULL;
+    fb->size = 0U;
+
+    if (f_open(&file, path, FA_READ) != FR_OK)
+    {
+        return kStatus_Fail;
+    }
+
+    FSIZE_t fsize = f_size(&file);
+    if (fsize == 0U)
+    {
+        (void)f_close(&file);
+        return kStatus_Success; /* empty file: size 0, data NULL */
+    }
+    if (fsize > FS_MAX_FILE_SIZE)
+    {
+        (void)f_close(&file);
+        return kStatus_Fail;
+    }
+
+    /* round size up to a multiple of FS_ALIGN, plus FS_ALIGN for manual alignment */
+    size_t allocSize = (((size_t)fsize + FS_ALIGN - 1U) & ~((size_t)FS_ALIGN - 1U)) + FS_ALIGN;
+    void *raw        = malloc(allocSize);
+    if (raw == NULL)
+    {
+        (void)f_close(&file);
+        return kStatus_Fail;
+    }
+    uint8_t *aligned = (uint8_t *)(((uintptr_t)raw + FS_ALIGN - 1U) & ~((uintptr_t)FS_ALIGN - 1U));
+
+    FRESULT res = f_read(&file, aligned, (UINT)fsize, &br);
+    (void)f_close(&file);
+
+    if ((res != FR_OK) || (br != (UINT)fsize))
+    {
+        free(raw);
+        return kStatus_Fail;
+    }
+
+    fb->raw  = raw;
+    fb->data = aligned;
+    fb->size = br;
+    return kStatus_Success;
+}
+
 /*!
  * @brief Main function.
  */
@@ -796,23 +867,26 @@ int main(void)
     BOARD_InitDebugConsole();
 
     int n = 0U;
+    fs_file_buf_t fb;
+
     if (FS_Mount() != kStatus_Success)
     {
         PRINTF("SD mount failed\r\n");
     }
-    else if (FS_ReadFile("/test.bin", s_fileBuf, FS_FILE_BUF_SIZE, &n) != kStatus_Success)
+    else if (FS_ReadFileAlloc("/T64K.BIN", &fb) != kStatus_Success)
     {
-        PRINTF("Read failed\r\n");
+        PRINTF("Read failed (open/size limit/malloc/read)\r\n");
     }
     else
     {
-        PRINTF("Read %u bytes\r\n", (unsigned)n);
-    }
-    for (int i = 0U; i < 16U && i < n; i++)
-    {
-        PRINTF("%02x ", (unsigned)s_fileBuf[i]);
-    }
+        PRINTF("Read %u bytes\r\n", (unsigned)fb.size);
+        for (int i = (fb.size > 16U) ? (fb.size - 16U) : 0U; i < fb.size; i++) /* last 16 bytes */
+        {
+            PRINTF("%02x ", (unsigned)fb.data[i]);
+        }
     PRINTF("\r\n");
+    FS_FreeFileBuf(&fb);
+}
  
     /* Copy to aligned RAM buffer: source array is const (flash) and not DMA-aligned */
     memcpy(s_fileBuf, s_Cbc256CipherExpected, sizeof(s_Cbc256CipherExpected));

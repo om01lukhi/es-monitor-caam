@@ -331,6 +331,8 @@ SET(CMAKE_CXX_FLAGS_FLEXSPI_NOR_DEBUG " \
     -MP \
     -fno-common \
     -ffunction-sections \
+    -Xlinker \
+    --defsym=__heap_size__=0x14000 \
     -fdata-sections \
     -ffreestanding \
     -fno-builtin \
@@ -493,6 +495,8 @@ SET(CMAKE_EXE_LINKER_FLAGS_FLEXSPI_NOR_DEBUG " \
     -Wl,--print-memory-usage \
     -Xlinker \
     --defsym=__use_flash64MB__=1 \
+    -Xlinker \
+    --defsym=__heap_size__=0x14000 \
     ${FPU} \
     ${SPECS} \
     -T${ProjDirPath}/MIMXRT1176xxxxx_cm7_flexspi_nor_ocram.ld -static \
@@ -521,6 +525,8 @@ SET(CMAKE_EXE_LINKER_FLAGS_FLEXSPI_NOR_RELEASE " \
     -Wl,--print-memory-usage \
     -Xlinker \
     --defsym=__use_flash64MB__=1 \
+    -Xlinker \
+    --defsym=__heap_size__=0x14000 \
     ${FPU} \
     ${SPECS} \
     -T${ProjDirPath}/MIMXRT1176xxxxx_cm7_flexspi_nor_ocram.ld -static \
