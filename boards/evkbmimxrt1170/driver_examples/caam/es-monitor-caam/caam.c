@@ -764,6 +764,22 @@ static status_t FS_ReadFile(const char *path, uint8_t *buf, int bufSize, int* by
     return (res == FR_OK) ? kStatus_Success : kStatus_Fail;
 }
 
+static FIL s_file;
+
+static status_t FS_WriteFile(const char *path, const uint8_t *buf, int size)
+{
+    int written = 0U;
+
+    if (f_open(&s_file, path, FA_WRITE | FA_CREATE_ALWAYS) != FR_OK)
+    {
+        return kStatus_Fail;
+    }
+    FRESULT res  = f_write(&s_file, buf, size, &written);
+    FRESULT cres = f_close(&s_file); /* commits data and directory entry */
+
+    return ((res == FR_OK) && (cres == FR_OK) && (written == size)) ? kStatus_Success : kStatus_Fail;
+}
+
 /*!
  * @brief Main function.
  */
@@ -797,6 +813,35 @@ int main(void)
         PRINTF("%02x ", (unsigned)s_fileBuf[i]);
     }
     PRINTF("\r\n");
+ 
+    /* Copy to aligned RAM buffer: source array is const (flash) and not DMA-aligned */
+    memcpy(s_fileBuf, s_Cbc256CipherExpected, sizeof(s_Cbc256CipherExpected));
+
+    if (FS_WriteFile("/test.bin", s_fileBuf, sizeof(s_Cbc256CipherExpected)) != kStatus_Success)
+    {
+        PRINTF("Write failed\r\n");
+    }
+    else
+    {
+        PRINTF("Wrote %u bytes\r\n", (unsigned)sizeof(s_Cbc256CipherExpected));
+
+        /* Read back and compare */
+        memset(s_fileBuf, 0, sizeof(s_fileBuf));
+        if (FS_ReadFile("/test.bin", s_fileBuf, FS_FILE_BUF_SIZE, &n) != kStatus_Success)
+        {
+            PRINTF("Read back failed\r\n");
+        }
+        else if ((n != sizeof(s_Cbc256CipherExpected)) ||
+                (memcmp(s_fileBuf, s_Cbc256CipherExpected, n) != 0))
+        {
+            PRINTF("Verify FAILED (read %u bytes)\r\n", (unsigned)n);
+        }
+        else
+        {
+            PRINTF("Verify OK (%u bytes)\r\n", (unsigned)n);
+        }
+    }
+
     /* Get default configuration. */
     CAAM_GetDefaultConfig(&caamConfig);
 
