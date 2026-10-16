@@ -787,7 +787,7 @@ static status_t FS_WriteFile(const char *path, const uint8_t *buf, int size)
 typedef struct
 {
     uint8_t *data; /* aligned, use this */
-    UINT size;     /* file size in bytes */
+    int size;     /* file size in bytes */
     void *raw;     /* pointer returned by malloc, for free() */
 } fs_file_buf_t;
 
@@ -803,7 +803,7 @@ static void FS_FreeFileBuf(fs_file_buf_t *fb)
 static status_t FS_ReadFileAlloc(const char *path, fs_file_buf_t *fb)
 {
     FIL file;
-    UINT br = 0U;
+    int br = 0U;
 
     fb->data = NULL;
     fb->raw  = NULL;
@@ -828,6 +828,8 @@ static status_t FS_ReadFileAlloc(const char *path, fs_file_buf_t *fb)
 
     /* round size up to a multiple of FS_ALIGN, plus FS_ALIGN for manual alignment */
     size_t allocSize = (((size_t)fsize + FS_ALIGN - 1U) & ~((size_t)FS_ALIGN - 1U)) + FS_ALIGN;
+    PRINTF("Allocating %d bytes for file %s\r\n", allocSize, path);
+
     void *raw        = malloc(allocSize);
     if (raw == NULL)
     {
@@ -836,10 +838,10 @@ static status_t FS_ReadFileAlloc(const char *path, fs_file_buf_t *fb)
     }
     uint8_t *aligned = (uint8_t *)(((uintptr_t)raw + FS_ALIGN - 1U) & ~((uintptr_t)FS_ALIGN - 1U));
 
-    FRESULT res = f_read(&file, aligned, (UINT)fsize, &br);
+    FRESULT res = f_read(&file, aligned, (int)fsize, &br);
     (void)f_close(&file);
 
-    if ((res != FR_OK) || (br != (UINT)fsize))
+    if ((res != FR_OK) || (br != (int)fsize))
     {
         free(raw);
         return kStatus_Fail;
@@ -885,35 +887,27 @@ int main(void)
             PRINTF("%02x ", (unsigned)fb.data[i]);
         }
     PRINTF("\r\n");
-    FS_FreeFileBuf(&fb);
+
+    /* If no further use of the file buffer is needed
+     * FS_FreeFileBuf(&fb);
+     */
 }
  
-    /* Copy to aligned RAM buffer: source array is const (flash) and not DMA-aligned */
-    memcpy(s_fileBuf, s_Cbc256CipherExpected, sizeof(s_Cbc256CipherExpected));
+    /* Write the data read from the file to another file */
 
-    if (FS_WriteFile("/test.bin", s_fileBuf, sizeof(s_Cbc256CipherExpected)) != kStatus_Success)
-    {
-        PRINTF("Write failed\r\n");
-    }
-    else
-    {
-        PRINTF("Wrote %u bytes\r\n", (unsigned)sizeof(s_Cbc256CipherExpected));
-
-        /* Read back and compare */
-        memset(s_fileBuf, 0, sizeof(s_fileBuf));
-        if (FS_ReadFile("/test.bin", s_fileBuf, FS_FILE_BUF_SIZE, &n) != kStatus_Success)
+    if (fb.data != NULL && fb.size > 0U)
         {
-            PRINTF("Read back failed\r\n");
+            if (FS_WriteFile("/test.bin", fb.data, fb.size) != kStatus_Success)
+            {
+                PRINTF("Write failed\r\n");
+            }
+            else
+            {
+                PRINTF("Wrote %u bytes\r\n", (unsigned)fb.size);
+            }
         }
-        else if ((n != sizeof(s_Cbc256CipherExpected)) ||
-                (memcmp(s_fileBuf, s_Cbc256CipherExpected, n) != 0))
-        {
-            PRINTF("Verify FAILED (read %u bytes)\r\n", (unsigned)n);
-        }
-        else
-        {
-            PRINTF("Verify OK (%u bytes)\r\n", (unsigned)n);
-        }
+    else {
+        PRINTF("No data read from file to write\r\n");
     }
 
     /* Get default configuration. */
