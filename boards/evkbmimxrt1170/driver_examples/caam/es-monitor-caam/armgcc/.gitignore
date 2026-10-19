@@ -1,0 +1,22 @@
+# Keep configuration files
+!CMakeLists.txt
+!config.cmake
+!flags.cmake
+
+# CMake build artifacts
+CMakeFiles/
+Makefile
+cmake_install.cmake
+build_log.txt
+output.map
+flexspi_nor_debug/
+debug/
+
+# Generated binaries
+*.elf
+*.bin
+
+# Test files and temporary files
+TEST.BIN
+*.bak
+entry_to_build_system.patch
