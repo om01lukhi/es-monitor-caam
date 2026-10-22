@@ -28,7 +28,9 @@ typedef enum _storage_status
     kStorage_WriteFailed,      /*!< Write error, or short write. */
     kStorage_InvalidParameter, /*!< NULL pointer or otherwise invalid argument. */
     kStorage_OutOfMemory,      /*!< Allocation failure. */
-    kStorage_FileTooLarge      /*!< File exceeds caller-provided size limit. */
+    kStorage_FileTooLarge,     /*!< File exceeds caller-provided size limit. */
+    kStorage_DeviceNotFound    /*!< Requested (fs, device) combination was never
+                                 *   probed/registered, or probing it failed. */
 } storage_status_t;
 
 /*! @brief File open modes supported by the storage API. */
@@ -42,12 +44,46 @@ typedef enum _storage_open_mode
 typedef struct storage_file storage_file_t;
 
 /*!
+ * @brief Filesystem types the storage API can be backed by.
+ *
+ * This is intentionally a flat enum rather than a string/name, so lookups
+ * are O(1) table indexing instead of string comparisons. Add new values
+ * here as new filesystem backends are implemented; existing backends are
+ * unaffected.
+ */
+typedef enum _storage_fs_type
+{
+    kStorageFs_FatFs = 0, /*!< FatFs (middleware/fatfs). */
+    kStorageFs_LittleFs,   /*!< littlefs (middleware/littlefs). */
+    kStorageFs_Count       /*!< Not a real value; number of fs types defined above. */
+} storage_fs_type_t;
+
+
+/*!
+ * @brief Physical/logical device types the storage API can target.
+ *
+ * Only one device is implemented by this example (the on-board SD card
+ * over USDHC), but the enum leaves room to add more (e.g. a second SD
+ * slot, SPI NOR flash, eMMC) without changing the lookup API.
+ */
+typedef enum _storage_device_type
+{
+    kStorageDevice_Sd0 = 0,  /*!< First/only SD card slot (USDHC + fsl_sd). */
+    kStorageDevice_QspiNor0, /*!< On-board QSPI/FlexSPI NOR flash. */
+    kStorageDevice_RamDisk0, /*!< In-memory RAM disk (no real hardware). */
+    kStorageDevice_Count     /*!< Not a real value; number of device types defined above. */
+
+} storage_device_type_t;
+
+
+/*!
  * @brief Table of function pointers implementing the storage operations.
  *
  * A backend provides a (typically static, singleton) instance of this
- * struct. The application obtains a pointer to it once (e.g. via
- * STORAGE_GetFatFsSdOps()) and then calls through the function pointers for
- * every operation, e.g. storage->open(...), storage->read(...).
+ * struct and registers it (see STORAGE_RegisterOps()) for one
+ * (storage_fs_type_t, storage_device_type_t) combination. The application
+ * looks the table up once via STORAGE_GetOps() and then calls through the
+ * function pointers for every operation, e.g. storage->open(...).
  */
 typedef struct _storage_ops
 {
@@ -121,14 +157,52 @@ typedef struct _storage_ops
     storage_status_t (*runFileTest)(const char *srcPath, const char *dstPath, size_t maxFileSize, bool *matched);
 } storage_ops_t;
 
+/*******************************************************************************
+ * Registry API
+ *
+ * A small, static, Linux-"probe"-style registry: each backend exposes a
+ * probe function (e.g. STORAGE_FatFsSd_Probe()) that attempts to bring up
+ * its hardware/dependencies and, on success, calls STORAGE_RegisterOps() to
+ * publish its ops table under a (fs, device) key. STORAGE_ProbeAll() calls
+ * every known backend's probe function once, typically early in main().
+ * The application then looks up ops via STORAGE_GetOps() and never needs
+ * to know backend-specific function names.
+ ******************************************************************************/
 
 /*!
- * @brief Returns the FatFs/SD-card backend operations table.
+ * @brief Registers a backend's ops table for a given (fs, device) pair.
  *
- * This is a simple static table - there is no dynamic registration beyond
- * what this example needs. The application calls this once to obtain the
- * table, then calls ops->init() before using any other operation.
+ * Called by a backend's own probe function after it has verified its
+ * hardware/dependencies are present and ready. Overwrites any previous
+ * registration for the same (fs, device) pair.
+ *
+ * @param fs     Filesystem type this ops table implements.
+ * @param device Device type this ops table talks to.
+ * @param ops    Pointer to a backend-owned, static storage_ops_t. Must
+ *               remain valid for the lifetime of the application; the
+ *               registry only stores the pointer, it does not copy or
+ *               free it.
  */
-const storage_ops_t *STORAGE_GetFatFsSdOps(void);
+void STORAGE_RegisterOps(storage_fs_type_t fs, storage_device_type_t device, const storage_ops_t *ops);
+
+/*!
+ * @brief Probes every known backend once, registering those that succeed.
+ *
+ * Intended to be called once, early at application start-up (e.g. the
+ * first lines of main(), after basic board/clock init). Safe to call more
+ * than once; later calls simply re-probe and re-register.
+ */
+void STORAGE_ProbeAll(void);
+
+/*!
+ * @brief Looks up a previously registered ops table.
+ *
+ * @param fs     Filesystem type being requested.
+ * @param device Device type being requested.
+ * @return Pointer to the registered storage_ops_t, or NULL if that (fs,
+ *         device) combination was never registered (not probed, or probe
+ *         failed). Callers must check for NULL before using the result.
+ */
+const storage_ops_t *STORAGE_GetOps(storage_fs_type_t fs, storage_device_type_t device);
 
 #endif /* STORAGE_H_ */

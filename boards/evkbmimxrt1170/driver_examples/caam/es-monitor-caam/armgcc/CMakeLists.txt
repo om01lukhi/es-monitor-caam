@@ -39,7 +39,13 @@ include(${ProjDirPath}/config.cmake)
 add_executable(${MCUX_SDK_PROJECT_NAME} 
 "${ProjDirPath}/../caam.c"
 "${ProjDirPath}/../storage.h"
+"${ProjDirPath}/../storage.c"
 "${ProjDirPath}/../storage_fatfs_sd.c"
+"${ProjDirPath}/../storage_littlefs_qspi.c"
+"${ProjDirPath}/../storage_fatfs_ramdisk.c"
+
+
+
 "${ProjDirPath}/../pin_mux.c"
 "${ProjDirPath}/../pin_mux.h"
 "${ProjDirPath}/../board.c"

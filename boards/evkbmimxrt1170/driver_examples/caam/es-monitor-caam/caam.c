@@ -143,20 +143,32 @@ int main(void)
     BOARD_BootClockRUN();
     BOARD_InitDebugConsole();
 
-    /* Obtain the storage backend's function-pointer table once, then only
-     * call through storage->... from here on. All implementation details
-     * (FatFs/SD init, buffer allocation, read/write/verify workflow) live
-     * in storage_fatfs_sd.c behind this API. */
-    const storage_ops_t *storage = STORAGE_GetFatFsSdOps();
+    /* Probe all known storage backends once; each backend brings up its own
+     * hardware/filesystem and self-registers on success (Linux-driver-probe
+     * style - see storage.c/storage.h). */
+    STORAGE_ProbeAll();
+
+    /* Look up the ops table generically by (filesystem, device) instead of
+     * calling a backend-specific function like STORAGE_GetFatFsSdOps().
+     * Returns NULL if that combination was never registered (not probed,
+     * or probe failed), which must be checked before use. */
+    const storage_ops_t *storage = STORAGE_GetOps(kStorageFs_FatFs, kStorageDevice_Sd0);
     storage_status_t fsStatus;
 
-    fsStatus = storage->init();
-    if (fsStatus != kStorage_Success)
+    if (storage == NULL)
     {
-        PRINTF("SD mount failed (status=%d)\r\n", (int)fsStatus);
+        PRINTF("Storage (FatFs, Sd0) not available (not probed/registered)\r\n");
     }
     else
     {
+        fsStatus = storage->init();
+        if (fsStatus != kStorage_Success)
+        {
+            PRINTF("SD mount failed (status=%d)\r\n", (int)fsStatus);
+            return 0;
+        }
+
+
 #if 1
         fsStatus = RunStorageFileTestManual(storage);
         if (fsStatus != kStorage_Success)

@@ -483,7 +483,7 @@ static storage_status_t FatFsSd_RunFileTest(const char *srcPath, const char *dst
 
 
 /*******************************************************************************
- * Registration
+ * Registration / probe
  ******************************************************************************/
 
 static const storage_ops_t s_fatFsSdOps = {
@@ -497,7 +497,21 @@ static const storage_ops_t s_fatFsSdOps = {
     .runFileTest = FatFsSd_RunFileTest,
 };
 
-const storage_ops_t *STORAGE_GetFatFsSdOps(void)
+/*!
+ * @brief Probe function for the FatFs+SD0 backend.
+ *
+ * Called once by STORAGE_ProbeAll(). Attempts to bring the SD card/USDHC
+ * host up and mount FatFs on it; on success, registers this backend's ops
+ * table under (kStorageFs_FatFs, kStorageDevice_Sd0) so the application can
+ * later obtain it via STORAGE_GetOps(). If the hardware/mount is not
+ * available, simply does not register - STORAGE_GetOps() will then return
+ * NULL for this (fs, device) pair.
+ */
+void STORAGE_FatFsSd_Probe(void)
 {
-    return &s_fatFsSdOps;
+    if (FatFsSd_Init() == kStorage_Success)
+    {
+        STORAGE_RegisterOps(kStorageFs_FatFs, kStorageDevice_Sd0, &s_fatFsSdOps);
+    }
 }
+
