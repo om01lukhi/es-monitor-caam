@@ -11,6 +11,13 @@
 / MSDK adaptation configuration
 /---------------------------------------------------------------------------*/
 #define SD_DISK_ENABLE
+#define RAM_DISK_ENABLE
+
+/* Default RAM disk size (128 * FF_MIN_SS = 65536 bytes = 128 sectors) is
+ * too small for f_mkfs() to fit a valid FAT12/16 volume (not enough
+ * clusters remain after the boot sector/FAT/root dir overhead, so
+ * f_mkfs() aborts with FR_MKFS_ABORTED). Override with a larger size. */
+#define FSL_FF_RAMDISK_DISK_SIZE (128U * 1024U)
 
 /*---------------------------------------------------------------------------/
 / Function Configurations

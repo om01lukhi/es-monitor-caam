@@ -135,7 +135,9 @@ include(middleware_sdmmc_host_usdhc_interrupt_MIMXRT1176_cm7)
 include(component_igpio_adapter_MIMXRT1176_cm7)
 include(middleware_fatfs_MIMXRT1176_cm7)
 include(middleware_fatfs_sd_MIMXRT1176_cm7)
+include(middleware_fatfs_ram_MIMXRT1176_cm7)
 include(middleware_sdmmc_osa_bm_MIMXRT1176_cm7)
+
 include(component_osa_bm_MIMXRT1176_cm7)
 
 IF(NOT DEFINED TARGET_LINK_SYSTEM_LIBRARIES)  

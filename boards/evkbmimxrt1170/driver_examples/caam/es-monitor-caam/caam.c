@@ -132,6 +132,90 @@ static storage_status_t RunStorageFileTestManual(const storage_ops_t *storage)
 }
 #endif
 
+/* Path used for the RAM disk manual test. The RAM disk starts out blank
+ * every boot, so there is no pre-existing source file to read on it - the
+ * test instead writes a known in-code pattern itself, then reads it back. */
+#define STORAGE_RAMDISK_TEST_PATH      "/ramtest.bin"
+#define STORAGE_RAMDISK_TEST_DATA_SIZE (128U)
+
+/*!
+ * @brief Manual RAM disk test: calls the individual open/write/close and
+ * open/read/close function pointers directly (same style as
+ * RunStorageFileTestManual() above), to verify the RAM disk backend's ops
+ * are actually wired up and working, independent of the SD card backend.
+ *
+ * Writes a known in-code pattern to STORAGE_RAMDISK_TEST_PATH on the RAM
+ * disk, reads it back, and compares byte-for-byte.
+ */
+static storage_status_t RunRamDiskFileTestManual(const storage_ops_t *ramDisk)
+{
+    storage_file_t *file = NULL;
+    uint8_t writeBuf[STORAGE_RAMDISK_TEST_DATA_SIZE];
+    uint8_t readBuf[STORAGE_RAMDISK_TEST_DATA_SIZE];
+    size_t bytesIo = 0U;
+    storage_status_t ret;
+
+    for (size_t i = 0U; i < sizeof(writeBuf); i++)
+    {
+        writeBuf[i] = (uint8_t)(i & 0xFFU);
+    }
+
+    /* 1) open + write, then close as soon as the write is done. */
+    ret = ramDisk->open(STORAGE_RAMDISK_TEST_PATH, kStorage_OpenWriteCreate, &file);
+    if (ret != kStorage_Success)
+    {
+        PRINTF("RAM disk open(%s) for write failed, status=%d\r\n", STORAGE_RAMDISK_TEST_PATH, (int)ret);
+        return ret;
+    }
+
+    ret = ramDisk->write(file, writeBuf, sizeof(writeBuf), &bytesIo);
+    (void)ramDisk->close(file);
+    file = NULL;
+
+    if ((ret != kStorage_Success) || (bytesIo != sizeof(writeBuf)))
+    {
+        PRINTF("RAM disk write(%s) failed, status=%d, wrote %u of %u bytes\r\n", STORAGE_RAMDISK_TEST_PATH, (int)ret,
+               (unsigned)bytesIo, (unsigned)sizeof(writeBuf));
+        return (ret != kStorage_Success) ? ret : kStorage_WriteFailed;
+    }
+    PRINTF("RAM disk: wrote %u bytes to %s\r\n", (unsigned)bytesIo, STORAGE_RAMDISK_TEST_PATH);
+
+    /* 2) open + read, then close as soon as the read is done. */
+    ret = ramDisk->open(STORAGE_RAMDISK_TEST_PATH, kStorage_OpenRead, &file);
+    if (ret != kStorage_Success)
+    {
+        PRINTF("RAM disk open(%s) for read failed, status=%d\r\n", STORAGE_RAMDISK_TEST_PATH, (int)ret);
+        return ret;
+    }
+
+    ret = ramDisk->read(file, readBuf, sizeof(readBuf), &bytesIo);
+    (void)ramDisk->close(file);
+    file = NULL;
+
+    if ((ret != kStorage_Success) || (bytesIo != sizeof(readBuf)))
+    {
+        PRINTF("RAM disk read(%s) failed, status=%d, got %u of %u bytes\r\n", STORAGE_RAMDISK_TEST_PATH, (int)ret,
+               (unsigned)bytesIo, (unsigned)sizeof(readBuf));
+        return (ret != kStorage_Success) ? ret : kStorage_ReadFailed;
+    }
+    PRINTF("RAM disk: read back %u bytes from %s\r\n", (unsigned)bytesIo, STORAGE_RAMDISK_TEST_PATH);
+
+    /* 3) verify. */
+    if (memcmp(writeBuf, readBuf, sizeof(writeBuf)) == 0)
+    {
+        PRINTF("RAM disk verify OK: read-back data matches written pattern (%u bytes)\r\n",
+               (unsigned)sizeof(writeBuf));
+    }
+    else
+    {
+        PRINTF("RAM disk verify FAILED: read-back data does not match written pattern\r\n");
+        return kStorage_Error;
+    }
+
+    return kStorage_Success;
+}
+
+
 /*!
  * @brief Main function.
  */
@@ -192,6 +276,32 @@ int main(void)
             PRINTF("Storage file test: no verified match (see diagnostics above)\r\n");
         }
 #endif
+    }
+
+    /* Independent RAM disk backend test, to confirm its ops are wired up
+     * and working regardless of the SD card backend's state above. */
+    const storage_ops_t *ramDisk = STORAGE_GetOps(kStorageFs_FatFs, kStorageDevice_RamDisk0);
+
+    if (ramDisk == NULL)
+    {
+        PRINTF("Storage (FatFs, RamDisk0) not available (not probed/registered)\r\n");
+    }
+    else
+    {
+        storage_status_t ramDiskStatus = ramDisk->init();
+
+        if (ramDiskStatus != kStorage_Success)
+        {
+            PRINTF("RAM disk mount failed (status=%d)\r\n", (int)ramDiskStatus);
+        }
+        else
+        {
+            ramDiskStatus = RunRamDiskFileTestManual(ramDisk);
+            if (ramDiskStatus != kStorage_Success)
+            {
+                PRINTF("RAM disk file test failed, status=%d\r\n", (int)ramDiskStatus);
+            }
+        }
     }
 
     while (1)
