@@ -6,121 +6,445 @@
  */
 
 /*
- * littlefs / on-board QSPI (FlexSPI) NOR flash backend stub for the storage
- * API declared in storage.h.
+ * littlefs / on-board QSPI (FlexSPI1) NOR flash backend for the storage API
+ * declared in storage.h.
  *
- * This file is a placeholder: it declares the full storage_ops_t table and
- * registers it under (kStorageFs_LittleFs, kStorageDevice_QspiNor0), but
- * every operation currently just returns kStorage_Error ("not yet
- * implemented") without touching any real littlefs/FlexSPI driver. This
- * lets the generic STORAGE_GetOps() lookup and the registry/probe
- * machinery be exercised for this (fs, device) pair, and gives a clear,
- * minimal skeleton to fill in with a real littlefs_hal (read/prog/erase)
- * and middleware/littlefs integration later.
+ * Uses FlexSPI1 - the same controller this project's own firmware
+ * executes-in-place (XIP) from (see armgcc/MIMXRT1176xxxxx_cm7_
+ * flexspi_nor_ocram.ld - m_text lives at 0x30002400, inside FlexSPI1's AMBA
+ * window). mflash_drv's init/erase/program path calls FLEXSPI_UpdateLUT()
+ * and FLEXSPI_SoftwareReset() on FlexSPI1; doing that while the CPU is
+ * actively fetching instructions from FlexSPI1 is unsafe UNLESS the code
+ * performing the reconfiguration itself runs from RAM instead of from
+ * FlexSPI1. That relocation is handled entirely in the linker script
+ * (armgcc/MIMXRT1176xxxxx_cm7_flexspi_nor_ocram.ld excludes mflash_drv.c.obj
+ * and fsl_flexspi.c.obj from the .text/flash placement and places them in
+ * .data/RAM instead - the exact same pattern NXP's own
+ * boards/evkbmimxrt1170/driver_examples/flexspi/nor/polling_transfer
+ * example uses for flexspi_nor_flash_ops.c.obj/fsl_flexspi.c.obj). No
+ * application code changes are needed to benefit from that relocation;
+ * it is transparent to this file and to mflash_drv.c itself.
  *
- * Mirrors the structure of storage_fatfs_sd.c, with the backend-specific
- * details (FlexSPI/littlefs config, lfs_t, lfs_file_t, flash erase/program)
- * intentionally left out until a real implementation is needed.
+ * Uses the mflash_drv (components/flash/mflash) low-level read/page-
+ * program/sector-erase driver, same pattern as NXP's own littlefs_shell
+ * example, targeting the default FLEXSPI1/FlexSPI1_AMBA_BASE (no override
+ * macros needed).
+ *
+ * Mirrors the structure of storage_fatfs_sd.c / storage_fatfs_ramdisk.c:
+ * this file owns all littlefs/flash details (lfs_t, lfs_file_t, lfs_config)
+ * and is not exposed to the application; it only sees storage_ops_t and
+ * storage_file_t.
+ *
+ * Because the reserved flash region may not contain a valid littlefs
+ * filesystem yet (e.g. first boot, or blank/erased flash), init() attempts
+ * lfs_mount() first and, if that fails, formats with lfs_format() and
+ * mounts again - the same fallback pattern used by the FatFs/RAM-disk
+ * backend for its blank-on-every-boot RAM disk.
  */
 
+
 #include "storage.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+#include "fsl_debug_console.h"
+#include "lfs.h"
+
+#include "mflash_drv.h"
+
+
 
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
 
-/*! @brief Backend-defined contents of the opaque storage_file_t handle.
- *  Placeholder - would hold an lfs_file_t (+ its buffers) once littlefs is
- *  wired up. */
+/*! @brief Backend-defined contents of the opaque storage_file_t handle. */
 struct storage_file
 {
-    int reserved;
+    lfs_file_t file;
+};
+
+/* Byte offset into the FlexSPI1 NOR flash chip where the littlefs partition
+ * starts. Must be past the end of this project's own firmware image
+ * (m_text/m_flash_config/etc., all well under 1MB for this example) to
+ * avoid overlapping code currently executing via XIP. 4MB matches NXP's
+ * own littlefs_shell example for this exact board. */
+#ifndef LITTLEFS_QSPI_START_ADDR
+#define LITTLEFS_QSPI_START_ADDR (0x400000U)
+#endif
+
+/* Littlefs geometry - matches NXP's own littlefs_shell example for this
+ * board/flash part (4KB erase sectors, 256B program pages). */
+#define LITTLEFS_QSPI_READ_SIZE      (16U)
+#define LITTLEFS_QSPI_PROG_SIZE      (MFLASH_PAGE_SIZE)
+#define LITTLEFS_QSPI_BLOCK_SIZE     (MFLASH_SECTOR_SIZE)
+#define LITTLEFS_QSPI_BLOCK_COUNT    (1024U) /* 1024 * 4KB = 4MB partition */
+#define LITTLEFS_QSPI_BLOCK_CYCLES   (100)
+#define LITTLEFS_QSPI_CACHE_SIZE     (LITTLEFS_QSPI_PROG_SIZE)
+#define LITTLEFS_QSPI_LOOKAHEAD_SIZE (16U)
+
+static lfs_t s_lfs;
+static bool s_mounted = false;
+
+/*******************************************************************************
+ * littlefs block-device callbacks (read/prog/erase/sync), backed by mflash_drv
+ ******************************************************************************/
+
+static int LittleFsQspi_BlockRead(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, void *buffer,
+                                   lfs_size_t size)
+{
+    uint32_t flashAddr = LITTLEFS_QSPI_START_ADDR + (block * c->block_size) + off;
+
+    if (mflash_drv_read(flashAddr, buffer, size) != kStatus_Success)
+    {
+        return LFS_ERR_IO;
+    }
+    return LFS_ERR_OK;
+}
+
+static int LittleFsQspi_BlockProg(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, const void *buffer,
+                                   lfs_size_t size)
+{
+    uint32_t flashAddr = LITTLEFS_QSPI_START_ADDR + (block * c->block_size) + off;
+    status_t status    = kStatus_Success;
+
+    if (!mflash_drv_is_page_aligned(size))
+    {
+        return LFS_ERR_INVAL;
+    }
+
+    for (uint32_t pageOfs = 0U; pageOfs < size; pageOfs += MFLASH_PAGE_SIZE)
+    {
+        status = mflash_drv_page_program(flashAddr + pageOfs, (void *)((uintptr_t)buffer + pageOfs));
+        if (status != kStatus_Success)
+        {
+            break;
+        }
+    }
+
+    return (status == kStatus_Success) ? LFS_ERR_OK : LFS_ERR_IO;
+}
+
+static int LittleFsQspi_BlockErase(const struct lfs_config *c, lfs_block_t block)
+{
+    uint32_t flashAddr = LITTLEFS_QSPI_START_ADDR + (block * c->block_size);
+    status_t status    = kStatus_Success;
+
+    for (uint32_t sectorOfs = 0U; sectorOfs < c->block_size; sectorOfs += MFLASH_SECTOR_SIZE)
+    {
+        status = mflash_drv_sector_erase(flashAddr + sectorOfs);
+        if (status != kStatus_Success)
+        {
+            break;
+        }
+    }
+
+    return (status == kStatus_Success) ? LFS_ERR_OK : LFS_ERR_IO;
+}
+
+static int LittleFsQspi_BlockSync(const struct lfs_config *c)
+{
+    (void)c;
+    return LFS_ERR_OK;
+}
+
+static const struct lfs_config s_lfsConfig = {
+    .context     = NULL,
+    .read        = LittleFsQspi_BlockRead,
+    .prog        = LittleFsQspi_BlockProg,
+    .erase       = LittleFsQspi_BlockErase,
+    .sync        = LittleFsQspi_BlockSync,
+    .read_size   = LITTLEFS_QSPI_READ_SIZE,
+    .prog_size   = LITTLEFS_QSPI_PROG_SIZE,
+    .block_size  = LITTLEFS_QSPI_BLOCK_SIZE,
+    .block_count = LITTLEFS_QSPI_BLOCK_COUNT,
+    .block_cycles      = LITTLEFS_QSPI_BLOCK_CYCLES,
+    .cache_size        = LITTLEFS_QSPI_CACHE_SIZE,
+    .lookahead_size    = LITTLEFS_QSPI_LOOKAHEAD_SIZE,
 };
 
 /*******************************************************************************
  * Low-level ops: init/open/read/write/close/getFileSize/deinit
- *
- * All stubs for now - return kStorage_Error to signal "not implemented".
  ******************************************************************************/
 
 static storage_status_t LittleFsQspi_Init(void)
 {
-    /* TODO: configure FlexSPI NOR flash HAL (read/prog/erase callbacks) and
-     * lfs_mount() (or lfs_format() + lfs_mount() on first use). */
-    return kStorage_Error;
+    int lfsResult;
+
+    if (s_mounted)
+    {
+        return kStorage_Success;
+    }
+
+    if (mflash_drv_init() != kStatus_Success)
+    {
+        PRINTF("littlefs/QSPI: mflash_drv_init() failed\r\n");
+        return kStorage_Error;
+    }
+
+    lfsResult = lfs_mount(&s_lfs, &s_lfsConfig);
+    if (lfsResult != LFS_ERR_OK)
+    {
+        /* Reserved region may be blank/corrupt (e.g. first boot) - format
+         * then mount again, same fallback pattern as the RAM disk backend. */
+        PRINTF("littlefs/QSPI: mount failed (err=%d) - formatting\r\n", lfsResult);
+
+        lfsResult = lfs_format(&s_lfs, &s_lfsConfig);
+        if (lfsResult != LFS_ERR_OK)
+        {
+            PRINTF("littlefs/QSPI: lfs_format failed, err=%d\r\n", lfsResult);
+            return kStorage_Error;
+        }
+
+        lfsResult = lfs_mount(&s_lfs, &s_lfsConfig);
+        if (lfsResult != LFS_ERR_OK)
+        {
+            PRINTF("littlefs/QSPI: mount after format failed, err=%d\r\n", lfsResult);
+            return kStorage_Error;
+        }
+
+        PRINTF("littlefs/QSPI: formatted and mounted successfully\r\n");
+    }
+
+    s_mounted = true;
+    return kStorage_Success;
 }
 
 static storage_status_t LittleFsQspi_Open(const char *path, storage_open_mode_t mode, storage_file_t **outFile)
 {
-    (void)path;
-    (void)mode;
-    (void)outFile;
-    /* TODO: lfs_file_open() with mode translated to LFS_O_RDONLY / LFS_O_WRONLY|LFS_O_CREAT. */
-    return kStorage_Error;
+    storage_file_t *file;
+    int flags;
+    int lfsResult;
+
+    if ((path == NULL) || (outFile == NULL))
+    {
+        return kStorage_InvalidParameter;
+    }
+    if (!s_mounted)
+    {
+        return kStorage_NotMounted;
+    }
+
+    switch (mode)
+    {
+        case kStorage_OpenRead:
+            flags = LFS_O_RDONLY;
+            break;
+        case kStorage_OpenWriteCreate:
+            flags = LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC;
+            break;
+        default:
+            return kStorage_InvalidParameter;
+    }
+
+    file = (storage_file_t *)malloc(sizeof(storage_file_t));
+    if (file == NULL)
+    {
+        return kStorage_OutOfMemory;
+    }
+
+    lfsResult = lfs_file_open(&s_lfs, &file->file, path, flags);
+    if (lfsResult != LFS_ERR_OK)
+    {
+        free(file);
+        return kStorage_OpenFailed;
+    }
+
+    *outFile = file;
+    return kStorage_Success;
 }
 
 static storage_status_t LittleFsQspi_Read(storage_file_t *file, uint8_t *buf, size_t bufSize, size_t *bytesRead)
 {
-    (void)file;
-    (void)buf;
-    (void)bufSize;
+    lfs_ssize_t result;
+
+    if ((file == NULL) || (buf == NULL))
+    {
+        return kStorage_InvalidParameter;
+    }
+
+    result = lfs_file_read(&s_lfs, &file->file, buf, (lfs_size_t)bufSize);
+
     if (bytesRead != NULL)
     {
-        *bytesRead = 0U;
+        *bytesRead = (result >= 0) ? (size_t)result : 0U;
     }
-    /* TODO: lfs_file_read(). */
-    return kStorage_Error;
+
+    return (result >= 0) ? kStorage_Success : kStorage_ReadFailed;
 }
 
-static storage_status_t LittleFsQspi_Write(storage_file_t *file, const uint8_t *buf, size_t size, size_t *bytesWritten)
+static storage_status_t LittleFsQspi_Write(storage_file_t *file, const uint8_t *buf, size_t size,
+                                            size_t *bytesWritten)
 {
-    (void)file;
-    (void)buf;
-    (void)size;
+    lfs_ssize_t result;
+
+    if ((file == NULL) || (buf == NULL))
+    {
+        return kStorage_InvalidParameter;
+    }
+
+    result = lfs_file_write(&s_lfs, &file->file, buf, (lfs_size_t)size);
+
     if (bytesWritten != NULL)
     {
-        *bytesWritten = 0U;
+        *bytesWritten = (result >= 0) ? (size_t)result : 0U;
     }
-    /* TODO: lfs_file_write(). */
-    return kStorage_Error;
+
+    if ((result < 0) || ((size_t)result != size))
+    {
+        return kStorage_WriteFailed;
+    }
+
+    return kStorage_Success;
 }
 
 static storage_status_t LittleFsQspi_Close(storage_file_t *file)
 {
-    (void)file;
-    /* TODO: lfs_file_close(). */
-    return kStorage_Error;
+    int lfsResult;
+
+    if (file == NULL)
+    {
+        return kStorage_InvalidParameter;
+    }
+
+    lfsResult = lfs_file_close(&s_lfs, &file->file);
+    free(file);
+
+    return (lfsResult == LFS_ERR_OK) ? kStorage_Success : kStorage_Error;
 }
 
 static storage_status_t LittleFsQspi_GetFileSize(const char *path, size_t *size)
 {
-    (void)path;
-    if (size != NULL)
+    struct lfs_info info;
+    int lfsResult;
+
+    if ((path == NULL) || (size == NULL))
     {
-        *size = 0U;
+        return kStorage_InvalidParameter;
     }
-    /* TODO: lfs_stat() and read info.size. */
-    return kStorage_Error;
+    if (!s_mounted)
+    {
+        return kStorage_NotMounted;
+    }
+
+    lfsResult = lfs_stat(&s_lfs, path, &info);
+    if (lfsResult != LFS_ERR_OK)
+    {
+        return kStorage_OpenFailed;
+    }
+
+    *size = (size_t)info.size;
+    return kStorage_Success;
 }
 
 static storage_status_t LittleFsQspi_Deinit(void)
 {
-    /* TODO: lfs_unmount(). */
+    if (s_mounted)
+    {
+        (void)lfs_unmount(&s_lfs);
+    }
+    s_mounted = false;
     return kStorage_Success;
 }
 
-static storage_status_t LittleFsQspi_RunFileTest(const char *srcPath, const char *dstPath, size_t maxFileSize, bool *matched)
+/*******************************************************************************
+ * High-level workflow: runFileTest (self-contained write -> read -> verify)
+ *
+ * Does not depend on srcPath existing anywhere (e.g. on the SD card); it
+ * generates its own known test pattern, writes it to dstPath on the QSPI
+ * littlefs partition, reads it back, and compares. srcPath is accepted for
+ * interface compatibility with other backends but is otherwise unused here.
+ ******************************************************************************/
+
+#define LITTLEFS_QSPI_TEST_PATTERN_SIZE (256U)
+
+static void LittleFsQspi_FillPattern(uint8_t *buf, size_t size)
 {
-    (void)srcPath;
-    (void)dstPath;
+    for (size_t i = 0U; i < size; i++)
+    {
+        buf[i] = (uint8_t)(i & 0xFFU);
+    }
+}
+
+static storage_status_t LittleFsQspi_RunFileTest(const char *srcPath, const char *dstPath, size_t maxFileSize,
+                                                  bool *matched)
+{
+    uint8_t testData[LITTLEFS_QSPI_TEST_PATTERN_SIZE];
+    uint8_t readBack[LITTLEFS_QSPI_TEST_PATTERN_SIZE];
+    storage_file_t *file = NULL;
+    storage_status_t status;
+    size_t written = 0U;
+    size_t read    = 0U;
+
+    (void)srcPath; /* self-contained test: no external source file needed */
     (void)maxFileSize;
+
     if (matched != NULL)
     {
         *matched = false;
     }
-    /* TODO: implement using only this file's own open()/read()/write()/close(),
-     * same pattern as FatFsSd_RunFileTest() in storage_fatfs_sd.c. */
-    return kStorage_Error;
+    if (dstPath == NULL)
+    {
+        return kStorage_InvalidParameter;
+    }
+
+    LittleFsQspi_FillPattern(testData, sizeof(testData));
+
+    /* 1) Write known test data (open -> write -> close). */
+    status = LittleFsQspi_Open(dstPath, kStorage_OpenWriteCreate, &file);
+    if (status != kStorage_Success)
+    {
+        PRINTF("littlefs/QSPI write-open failed, status=%d\r\n", (int)status);
+        return status;
+    }
+
+    status = LittleFsQspi_Write(file, testData, sizeof(testData), &written);
+    (void)LittleFsQspi_Close(file);
+    file = NULL;
+
+    if ((status != kStorage_Success) || (written != sizeof(testData)))
+    {
+        PRINTF("littlefs/QSPI write failed, status=%d\r\n", (int)status);
+        return (status == kStorage_Success) ? kStorage_WriteFailed : status;
+    }
+    PRINTF("littlefs/QSPI: wrote %u bytes to %s\r\n", (unsigned)written, dstPath);
+
+    /* 2) Read it back (open -> read -> close). */
+    status = LittleFsQspi_Open(dstPath, kStorage_OpenRead, &file);
+    if (status != kStorage_Success)
+    {
+        PRINTF("littlefs/QSPI read-open failed, status=%d\r\n", (int)status);
+        return status;
+    }
+
+    status = LittleFsQspi_Read(file, readBack, sizeof(readBack), &read);
+    (void)LittleFsQspi_Close(file);
+    file = NULL;
+
+    if ((status != kStorage_Success) || (read != sizeof(testData)))
+    {
+        PRINTF("littlefs/QSPI read failed, status=%d\r\n", (int)status);
+        return (status == kStorage_Success) ? kStorage_ReadFailed : status;
+    }
+    PRINTF("littlefs/QSPI: read back %u bytes from %s\r\n", (unsigned)read, dstPath);
+
+    /* 3) Verify. */
+    if (memcmp(testData, readBack, sizeof(testData)) == 0)
+    {
+        PRINTF("littlefs/QSPI verify OK: read-back data matches written pattern (%u bytes)\r\n",
+               (unsigned)sizeof(testData));
+        if (matched != NULL)
+        {
+            *matched = true;
+        }
+    }
+    else
+    {
+        PRINTF("littlefs/QSPI verify FAILED: read-back data does not match written pattern\r\n");
+    }
+
+    return kStorage_Success;
 }
 
 /*******************************************************************************
@@ -141,16 +465,13 @@ static const storage_ops_t s_littleFsQspiOps = {
 /*!
  * @brief Probe function for the littlefs+QSPI-NOR backend.
  *
- * Called once by STORAGE_ProbeAll(). Currently always attempts init() and
- * only registers on success; since LittleFsQspi_Init() is a stub that
- * returns kStorage_Error, this backend will not register and
- * STORAGE_GetOps(kStorageFs_LittleFs, kStorageDevice_QspiNor0) will return
- * NULL until a real implementation is filled in.
+ * Called once by STORAGE_ProbeAll(). Attempts to mount (formatting first,
+ * if necessary) the reserved littlefs partition on FlexSPI1 NOR flash; on
+ * success, registers this backend's ops table under
+ * (kStorageFs_LittleFs, kStorageDevice_QspiNor0).
  */
-void STORAGE_LittleFsQspi_Probe(void)
+static void __attribute__((constructor))
+STORAGE_IF_RegisterLittleFsQspi(void)
 {
-    if (LittleFsQspi_Init() == kStorage_Success)
-    {
-        STORAGE_RegisterOps(kStorageFs_LittleFs, kStorageDevice_QspiNor0, &s_littleFsQspiOps);
-    }
+    STORAGE_RegisterOps(kStorageFs_LittleFs, kStorageDevice_QspiNor0, &s_littleFsQspiOps);
 }

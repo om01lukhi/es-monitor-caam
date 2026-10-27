@@ -507,11 +507,9 @@ static const storage_ops_t s_fatFsSdOps = {
  * available, simply does not register - STORAGE_GetOps() will then return
  * NULL for this (fs, device) pair.
  */
-void STORAGE_FatFsSd_Probe(void)
-{
-    if (FatFsSd_Init() == kStorage_Success)
-    {
-        STORAGE_RegisterOps(kStorageFs_FatFs, kStorageDevice_Sd0, &s_fatFsSdOps);
-    }
-}
 
+static void __attribute__((constructor))
+STORAGE_IF_RegisterFatFsSd(void)
+{
+    STORAGE_RegisterOps(kStorageFs_FatFs, kStorageDevice_Sd0, &s_fatFsSdOps);
+}

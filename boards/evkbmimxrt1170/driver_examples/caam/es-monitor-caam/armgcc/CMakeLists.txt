@@ -80,7 +80,11 @@ set(CMAKE_MODULE_PATH
     ${SdkRootDirPath}/middleware/fatfs
     ${SdkRootDirPath}/components/gpio
     ${SdkRootDirPath}/components/osa
+    ${SdkRootDirPath}/components/flash/mflash/mimxrt1170evkb
+    ${SdkRootDirPath}/components/flash/mflash
+    ${SdkRootDirPath}/middleware/littlefs
 )
+
 
 # include modules
 include(utility_debug_console_lite_MIMXRT1176_cm7)
@@ -139,6 +143,15 @@ include(middleware_fatfs_ram_MIMXRT1176_cm7)
 include(middleware_sdmmc_osa_bm_MIMXRT1176_cm7)
 
 include(component_osa_bm_MIMXRT1176_cm7)
+
+include(component_mflash_mimxrt1170evkb_MIMXRT1176_cm7)
+
+include(component_mflash_common_MIMXRT1176_cm7)
+
+include(driver_flexspi_MIMXRT1176_cm7)
+
+include(middleware_littlefs_MIMXRT1176_cm7)
+
 
 IF(NOT DEFINED TARGET_LINK_SYSTEM_LIBRARIES)  
     SET(TARGET_LINK_SYSTEM_LIBRARIES "-lm -lc -lgcc -lnosys")  

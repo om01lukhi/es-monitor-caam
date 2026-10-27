@@ -104,10 +104,28 @@ SECTIONS
   .text :
   {
     . = ALIGN(4);
-    *(.text)                 /* .text sections (code) */
-    *(.text*)                /* .text* sections (code) */
-    *(.rodata)               /* .rodata sections (constants, strings, etc.) */
-    *(.rodata*)              /* .rodata* sections (constants, strings, etc.) */
+    *(EXCLUDE_FILE(
+        /* mflash_drv.c calls FLEXSPI_UpdateLUT()/FLEXSPI_SoftwareReset() on
+         * FLEXSPI1 - the same controller this XIP image executes from.
+         * Exclude it (and the fsl_flexspi.c driver it calls into) from flash
+         * and place them in RAM instead (see the .data section below),
+         * matching NXP's own flexspi/nor/polling_transfer example's linker
+         * script for this exact FlexSPI1-is-XIP-host scenario. */
+        */mflash_drv.c.obj
+        */fsl_flexspi.c.obj
+    ) .text)                 /* .text sections (code) */
+    *(EXCLUDE_FILE(
+        */mflash_drv.c.obj
+        */fsl_flexspi.c.obj
+    ) .text*)                /* .text* sections (code) */
+    *(EXCLUDE_FILE(
+        */mflash_drv.c.obj
+        */fsl_flexspi.c.obj
+    ) .rodata)               /* .rodata sections (constants, strings, etc.) */
+    *(EXCLUDE_FILE(
+        */mflash_drv.c.obj
+        */fsl_flexspi.c.obj
+    ) .rodata*)              /* .rodata* sections (constants, strings, etc.) */
     *(.glue_7)               /* glue arm to thumb code */
     *(.glue_7t)              /* glue thumb to arm code */
     *(.eh_frame)
@@ -115,6 +133,7 @@ SECTIONS
     KEEP (*(.fini))
     . = ALIGN(4);
   } > m_text
+
 
   .ARM.extab :
   {
@@ -209,8 +228,13 @@ SECTIONS
     __DATA_RAM = .;
     __data_start__ = .;      /* create a global symbol at data start */
     *(m_usb_dma_init_data)
+    /* Explicit placement of FlexSPI1-touching flash code in RAM - see the
+     * matching EXCLUDE_FILE() in the .text section above for why. */
+    */mflash_drv.c.obj(.text .text* .rodata .rodata*)
+    */fsl_flexspi.c.obj(.text .text* .rodata .rodata*)
     *(.data)                 /* .data sections */
     *(.data*)                /* .data* sections */
+
     KEEP(*(.jcr*))
     . = ALIGN(4);
     __data_end__ = .;        /* define a global symbol at data end */

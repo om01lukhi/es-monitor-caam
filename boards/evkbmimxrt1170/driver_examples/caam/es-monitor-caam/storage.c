@@ -20,6 +20,7 @@
  */
 
 #include "storage.h"
+#include "fsl_debug_console.h"
 
 /*******************************************************************************
  * Registry storage
@@ -51,6 +52,11 @@ void STORAGE_RegisterOps(storage_fs_type_t fs, storage_device_type_t device, con
         return;
     }
 
+    if (s_registry[fs][device] != NULL)
+    {
+        PRINTF("WARNING: Storage ops already assigned for FS %d, Device %d. Assignment skipped.\n", fs, device);
+        return;
+    }
     s_registry[fs][device] = ops;
 }
 
@@ -63,18 +69,3 @@ const storage_ops_t *STORAGE_GetOps(storage_fs_type_t fs, storage_device_type_t 
 
     return s_registry[fs][device];
 }
-
-void STORAGE_ProbeAll(void)
-{
-    /* Each probe function brings up its own hardware/dependencies and
-     * self-registers via STORAGE_RegisterOps() on success. A probe that
-     * fails (e.g. no SD card inserted) simply does not register; the
-     * corresponding STORAGE_GetOps() call will then return NULL. */
-    STORAGE_FatFsSd_Probe();
-    STORAGE_LittleFsQspi_Probe();
-    STORAGE_FatFsRamDisk_Probe();
-
-    /* Add further backends' probe calls here. */
-
-}
-

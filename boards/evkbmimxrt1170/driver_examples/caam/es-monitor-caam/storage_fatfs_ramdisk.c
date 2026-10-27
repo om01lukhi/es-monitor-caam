@@ -411,16 +411,8 @@ static const storage_ops_t s_fatFsRamDiskOps = {
  * if necessary) the in-memory RAM disk; on success, registers this
  * backend's ops table under (kStorageFs_FatFs, kStorageDevice_RamDisk0).
  */
-void STORAGE_FatFsRamDisk_Probe(void)
+static void __attribute__((constructor))
+STORAGE_IF_RegisterFatFsRamDisk(void)
 {
-    storage_status_t initStatus = FatFsRamDisk_Init();
-
-    if (initStatus == kStorage_Success)
-    {
-        STORAGE_RegisterOps(kStorageFs_FatFs, kStorageDevice_RamDisk0, &s_fatFsRamDiskOps);
-    }
-    else
-    {
-        PRINTF("RAM disk: probe failed, init status=%d - not registering backend\r\n", (int)initStatus);
-    }
+    STORAGE_RegisterOps(kStorageFs_FatFs, kStorageDevice_RamDisk0, &s_fatFsRamDiskOps);
 }

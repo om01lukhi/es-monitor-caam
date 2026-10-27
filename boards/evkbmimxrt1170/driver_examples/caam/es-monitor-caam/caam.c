@@ -215,10 +215,95 @@ static storage_status_t RunRamDiskFileTestManual(const storage_ops_t *ramDisk)
     return kStorage_Success;
 }
 
+/* Path used for the littlefs/QSPI manual test. Like the RAM disk, the
+ * littlefs partition may be blank on first boot - the test writes a known
+ * in-code pattern itself, then reads it back, instead of depending on a
+ * pre-existing source file. */
+#define STORAGE_LITTLEFS_TEST_PATH      "/lfstest.bin"
+#define STORAGE_LITTLEFS_TEST_DATA_SIZE (128U)
+
+/*!
+ * @brief Manual littlefs/QSPI test: calls the individual open/write/close
+ * and open/read/close function pointers directly (same style as
+ * RunRamDiskFileTestManual() above), to verify the littlefs+QSPI backend's
+ * ops are actually wired up and working, independent of the SD card and
+ * RAM disk backends.
+ *
+ * Writes a known in-code pattern to STORAGE_LITTLEFS_TEST_PATH on the
+ * littlefs/QSPI partition, reads it back, and compares byte-for-byte.
+ */
+static storage_status_t RunLittleFsQspiFileTestManual(const storage_ops_t *littleFs)
+{
+    storage_file_t *file = NULL;
+    uint8_t writeBuf[STORAGE_LITTLEFS_TEST_DATA_SIZE];
+    uint8_t readBuf[STORAGE_LITTLEFS_TEST_DATA_SIZE];
+    size_t bytesIo = 0U;
+    storage_status_t ret;
+
+    for (size_t i = 0U; i < sizeof(writeBuf); i++)
+    {
+        writeBuf[i] = (uint8_t)(i & 0xFFU);
+    }
+
+    /* 1) open + write, then close as soon as the write is done. */
+    ret = littleFs->open(STORAGE_LITTLEFS_TEST_PATH, kStorage_OpenWriteCreate, &file);
+    if (ret != kStorage_Success)
+    {
+        PRINTF("littlefs/QSPI open(%s) for write failed, status=%d\r\n", STORAGE_LITTLEFS_TEST_PATH, (int)ret);
+        return ret;
+    }
+
+    ret = littleFs->write(file, writeBuf, sizeof(writeBuf), &bytesIo);
+    (void)littleFs->close(file);
+    file = NULL;
+
+    if ((ret != kStorage_Success) || (bytesIo != sizeof(writeBuf)))
+    {
+        PRINTF("littlefs/QSPI write(%s) failed, status=%d, wrote %u of %u bytes\r\n", STORAGE_LITTLEFS_TEST_PATH,
+               (int)ret, (unsigned)bytesIo, (unsigned)sizeof(writeBuf));
+        return (ret != kStorage_Success) ? ret : kStorage_WriteFailed;
+    }
+    PRINTF("littlefs/QSPI: wrote %u bytes to %s\r\n", (unsigned)bytesIo, STORAGE_LITTLEFS_TEST_PATH);
+
+    /* 2) open + read, then close as soon as the read is done. */
+    ret = littleFs->open(STORAGE_LITTLEFS_TEST_PATH, kStorage_OpenRead, &file);
+    if (ret != kStorage_Success)
+    {
+        PRINTF("littlefs/QSPI open(%s) for read failed, status=%d\r\n", STORAGE_LITTLEFS_TEST_PATH, (int)ret);
+        return ret;
+    }
+
+    ret = littleFs->read(file, readBuf, sizeof(readBuf), &bytesIo);
+    (void)littleFs->close(file);
+    file = NULL;
+
+    if ((ret != kStorage_Success) || (bytesIo != sizeof(readBuf)))
+    {
+        PRINTF("littlefs/QSPI read(%s) failed, status=%d, got %u of %u bytes\r\n", STORAGE_LITTLEFS_TEST_PATH,
+               (int)ret, (unsigned)bytesIo, (unsigned)sizeof(readBuf));
+        return (ret != kStorage_Success) ? ret : kStorage_ReadFailed;
+    }
+    PRINTF("littlefs/QSPI: read back %u bytes from %s\r\n", (unsigned)bytesIo, STORAGE_LITTLEFS_TEST_PATH);
+
+    /* 3) verify. */
+    if (memcmp(writeBuf, readBuf, sizeof(writeBuf)) == 0)
+    {
+        PRINTF("littlefs/QSPI verify OK: read-back data matches written pattern (%u bytes)\r\n",
+               (unsigned)sizeof(writeBuf));
+    }
+    else
+    {
+        PRINTF("littlefs/QSPI verify FAILED: read-back data does not match written pattern\r\n");
+        return kStorage_Error;
+    }
+
+    return kStorage_Success;
+}
 
 /*!
  * @brief Main function.
  */
+
 int main(void)
 {
     /* Init hardware */
@@ -227,10 +312,6 @@ int main(void)
     BOARD_BootClockRUN();
     BOARD_InitDebugConsole();
 
-    /* Probe all known storage backends once; each backend brings up its own
-     * hardware/filesystem and self-registers on success (Linux-driver-probe
-     * style - see storage.c/storage.h). */
-    STORAGE_ProbeAll();
 
     /* Look up the ops table generically by (filesystem, device) instead of
      * calling a backend-specific function like STORAGE_GetFatFsSdOps().
@@ -300,6 +381,35 @@ int main(void)
             if (ramDiskStatus != kStorage_Success)
             {
                 PRINTF("RAM disk file test failed, status=%d\r\n", (int)ramDiskStatus);
+            }
+        }
+    }
+
+    /* Independent littlefs/QSPI (FlexSPI1) backend test, to confirm its
+     * ops are wired up and working regardless of the SD card / RAM disk
+     * backends' state above. Safe under flexspi_nor_debug/release builds
+     * because the linker script relocates mflash_drv.c.obj/fsl_flexspi.c.obj
+     * to RAM - see the comment in storage.c's STORAGE_ProbeAll(). */
+    const storage_ops_t *littleFs = STORAGE_GetOps(kStorageFs_LittleFs, kStorageDevice_QspiNor0);
+
+    if (littleFs == NULL)
+    {
+        PRINTF("Storage (LittleFs, QspiNor0) not available (not probed/registered)\r\n");
+    }
+    else
+    {
+        storage_status_t littleFsStatus = littleFs->init();
+
+        if (littleFsStatus != kStorage_Success)
+        {
+            PRINTF("littlefs/QSPI mount failed (status=%d)\r\n", (int)littleFsStatus);
+        }
+        else
+        {
+            littleFsStatus = RunLittleFsQspiFileTestManual(littleFs);
+            if (littleFsStatus != kStorage_Success)
+            {
+                PRINTF("littlefs/QSPI file test failed, status=%d\r\n", (int)littleFsStatus);
             }
         }
     }
