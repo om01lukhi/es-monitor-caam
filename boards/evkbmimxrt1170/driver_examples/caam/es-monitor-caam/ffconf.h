@@ -12,6 +12,9 @@
 /---------------------------------------------------------------------------*/
 #define SD_DISK_ENABLE
 #define RAM_DISK_ENABLE
+#define USB_DISK_ENABLE
+
+
 
 /* Default RAM disk size (128 * FF_MIN_SS = 65536 bytes = 128 sectors) is
  * too small for f_mkfs() to fit a valid FAT12/16 volume (not enough

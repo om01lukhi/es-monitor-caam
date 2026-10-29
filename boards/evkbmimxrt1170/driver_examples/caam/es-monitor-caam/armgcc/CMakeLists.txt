@@ -43,6 +43,8 @@ add_executable(${MCUX_SDK_PROJECT_NAME}
 "${ProjDirPath}/../storage_fatfs_sd.c"
 "${ProjDirPath}/../storage_littlefs_qspi.c"
 "${ProjDirPath}/../storage_fatfs_ramdisk.c"
+"${ProjDirPath}/../storage_usb_msd.c"
+"${ProjDirPath}/../usb_host_config.h"
 
 
 
@@ -83,7 +85,9 @@ set(CMAKE_MODULE_PATH
     ${SdkRootDirPath}/components/flash/mflash/mimxrt1170evkb
     ${SdkRootDirPath}/components/flash/mflash
     ${SdkRootDirPath}/middleware/littlefs
+    ${SdkRootDirPath}/middleware/usb
 )
+
 
 
 # include modules
@@ -151,6 +155,21 @@ include(component_mflash_common_MIMXRT1176_cm7)
 include(driver_flexspi_MIMXRT1176_cm7)
 
 include(middleware_littlefs_MIMXRT1176_cm7)
+
+include(middleware_usb_host_ehci_MIMXRT1176_cm7)
+
+include(middleware_usb_phy_MIMXRT1176_cm7)
+
+include(middleware_usb_host_msd_MIMXRT1176_cm7)
+
+include(middleware_usb_common_header_MIMXRT1176_cm7)
+
+include(middleware_usb_host_common_header_MIMXRT1176_cm7)
+
+include(middleware_usb_host_stack_MIMXRT1176_cm7)
+
+include(middleware_fatfs_usb_MIMXRT1176_cm7)
+
 
 
 IF(NOT DEFINED TARGET_LINK_SYSTEM_LIBRARIES)  

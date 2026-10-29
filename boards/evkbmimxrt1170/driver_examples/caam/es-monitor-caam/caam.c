@@ -20,6 +20,8 @@
 #include "stdlib.h"
 #include "stdint.h"
 
+
+
 #include <string.h>
 
 /*
@@ -301,6 +303,167 @@ static storage_status_t RunLittleFsQspiFileTestManual(const storage_ops_t *littl
 }
 
 /*!
+ * @brief Manual USB MSD test: calls the individual open/read/write/close
+ * function pointers directly, same style as RunStorageFileTestManual()
+ * (SD card) above, instead of going through the single combined
+ * usbMsd->runFileTest() call.
+ *
+ * Reads STORAGE_TEST_SRC_PATH from the USB drive, writes it back as
+ * STORAGE_TEST_DST_PATH, and verifies the two match byte-for-byte.
+ */
+static storage_status_t RunUsbMsdFileTestManual(const storage_ops_t *usbMsd)
+{
+    storage_file_t *file = NULL;
+    size_t fileSize       = 0U;
+    uint8_t *buf          = NULL;
+    size_t bytesIo        = 0U;
+    storage_status_t ret;
+
+    ret = usbMsd->getFileSize(STORAGE_TEST_SRC_PATH, &fileSize);
+    if (ret != kStorage_Success)
+    {
+        PRINTF("USB MSD getFileSize(%s) failed, status=%d\r\n", STORAGE_TEST_SRC_PATH, (int)ret);
+        return ret;
+    }
+    if (fileSize == 0U)
+    {
+        PRINTF("USB MSD: %s is empty, nothing to read/write\r\n", STORAGE_TEST_SRC_PATH);
+        return kStorage_Success;
+    }
+    if (fileSize > STORAGE_TEST_MAX_FILE_SIZE)
+    {
+        PRINTF("USB MSD: %s too large (%u bytes)\r\n", STORAGE_TEST_SRC_PATH, (unsigned)fileSize);
+        return kStorage_FileTooLarge;
+    }
+
+    buf = (uint8_t *)malloc(fileSize);
+    if (buf == NULL)
+    {
+        PRINTF("USB MSD: malloc(%u) failed\r\n", (unsigned)fileSize);
+        return kStorage_OutOfMemory;
+    }
+
+    /* 1) open + read from source, then close as soon as the read is done. */
+    ret = usbMsd->open(STORAGE_TEST_SRC_PATH, kStorage_OpenRead, &file);
+    if (ret != kStorage_Success)
+    {
+        PRINTF("USB MSD open(%s) failed, status=%d\r\n", STORAGE_TEST_SRC_PATH, (int)ret);
+        free(buf);
+        return ret;
+    }
+
+    ret = usbMsd->read(file, buf, fileSize, &bytesIo);
+    (void)usbMsd->close(file);
+    file = NULL;
+
+    if ((ret != kStorage_Success) || (bytesIo != fileSize))
+    {
+        PRINTF("USB MSD read(%s) failed, status=%d, got %u of %u bytes\r\n", STORAGE_TEST_SRC_PATH, (int)ret,
+               (unsigned)bytesIo, (unsigned)fileSize);
+        free(buf);
+        return (ret != kStorage_Success) ? ret : kStorage_ReadFailed;
+    }
+
+    PRINTF("USB MSD: read %u bytes from %s\r\n", (unsigned)bytesIo, STORAGE_TEST_SRC_PATH);
+    PRINTF("Last 16 bytes of read data: ");
+    for (size_t i = (bytesIo > 16U) ? (bytesIo - 16U) : 0U; i < bytesIo; i++) /* last 16 bytes */
+    {
+        PRINTF("%02x ", (unsigned)buf[i]);
+    }
+    PRINTF("\r\n");
+
+    /* 2) open + write to destination, then close as soon as the write is done. */
+    ret = usbMsd->open(STORAGE_TEST_DST_PATH, kStorage_OpenWriteCreate, &file);
+    if (ret != kStorage_Success)
+    {
+        PRINTF("USB MSD open(%s) failed, status=%d\r\n", STORAGE_TEST_DST_PATH, (int)ret);
+        free(buf);
+        return ret;
+    }
+
+    ret = usbMsd->write(file, buf, bytesIo, NULL);
+    (void)usbMsd->close(file);
+    file = NULL;
+
+    if (ret != kStorage_Success)
+    {
+        PRINTF("USB MSD write(%s) failed, status=%d\r\n", STORAGE_TEST_DST_PATH, (int)ret);
+        free(buf);
+        return ret;
+    }
+
+    PRINTF("USB MSD: wrote %u bytes to %s\r\n", (unsigned)bytesIo, STORAGE_TEST_DST_PATH);
+
+    /* 3) open + read back the destination in small fixed-size chunks, then
+     * close, then verify. A second full-file-sized heap buffer is NOT
+     * used here: on this bare-metal target's small newlib-nano heap, that
+     * would require buf (already allocated) and a second same-size buffer
+     * to be alive simultaneously, which can exceed the available heap and
+     * fail with kStorage_OutOfMemory. Instead, verify using a small,
+     * fixed-size stack buffer and compare each chunk against the
+     * corresponding offset into buf, matching the already-proven-correct
+     * pattern used by storage_usb_msd.c's own (now-bypassed)
+     * UsbMsd_VerifyFile() helper. */
+    size_t writtenSize = bytesIo;
+    uint8_t verifyChunk[512];
+    size_t offset   = 0U;
+    bool verifyFailed = false;
+
+    ret = usbMsd->open(STORAGE_TEST_DST_PATH, kStorage_OpenRead, &file);
+    if (ret != kStorage_Success)
+    {
+        PRINTF("USB MSD verify-open(%s) failed, status=%d\r\n", STORAGE_TEST_DST_PATH, (int)ret);
+        free(buf);
+        return ret;
+    }
+
+    while (offset < writtenSize)
+    {
+        size_t want = writtenSize - offset;
+        size_t got  = 0U;
+
+        if (want > sizeof(verifyChunk))
+        {
+            want = sizeof(verifyChunk);
+        }
+
+        ret = usbMsd->read(file, verifyChunk, want, &got);
+        if ((ret != kStorage_Success) || (got != want))
+        {
+            PRINTF("USB MSD verify-read(%s) failed, status=%d, got %u of %u bytes\r\n", STORAGE_TEST_DST_PATH,
+                   (int)ret, (unsigned)got, (unsigned)want);
+            (void)usbMsd->close(file);
+            free(buf);
+            return (ret != kStorage_Success) ? ret : kStorage_ReadFailed;
+        }
+
+        if (memcmp(verifyChunk, buf + offset, want) != 0)
+        {
+            verifyFailed = true;
+            break;
+        }
+
+        offset += want;
+    }
+
+    (void)usbMsd->close(file);
+    file = NULL;
+
+    if (verifyFailed)
+    {
+        PRINTF("USB MSD verify FAILED: written file does not match original data\r\n");
+    }
+    else
+    {
+        PRINTF("USB MSD verify OK: written file matches original data (%u bytes)\r\n", (unsigned)writtenSize);
+    }
+
+    free(buf);
+    return kStorage_Success;
+}
+
+
+/*!
  * @brief Main function.
  */
 
@@ -333,30 +496,11 @@ int main(void)
             return 0;
         }
 
-
-#if 1
         fsStatus = RunStorageFileTestManual(storage);
         if (fsStatus != kStorage_Success)
         {
             PRINTF("Storage file test failed, status=%d\r\n", (int)fsStatus);
         }
-#else
-        /* Reads STORAGE_TEST_SRC_PATH, writes it to STORAGE_TEST_DST_PATH and
-         * verifies the two match. All open()/read()/write()/close() calls
-         * happen inside this single function pointer call. */
-        bool fileTestMatched = false;
-
-        fsStatus = storage->runFileTest(STORAGE_TEST_SRC_PATH, STORAGE_TEST_DST_PATH, STORAGE_TEST_MAX_FILE_SIZE,
-                                         &fileTestMatched);
-        if (fsStatus != kStorage_Success)
-        {
-            PRINTF("Storage file test failed, status=%d\r\n", (int)fsStatus);
-        }
-        else if (!fileTestMatched)
-        {
-            PRINTF("Storage file test: no verified match (see diagnostics above)\r\n");
-        }
-#endif
     }
 
     /* Independent RAM disk backend test, to confirm its ops are wired up
@@ -412,6 +556,38 @@ int main(void)
                 PRINTF("littlefs/QSPI file test failed, status=%d\r\n", (int)littleFsStatus);
             }
         }
+    }
+
+    /* Independent USB host MSD/FatFs backend test. Unlike the other three
+     * backends, this one depends on a USB flash drive actually being
+     * plugged into the board's USB host port when init() runs - init()
+     * blocks internally (polling the EHCI task function and the MSD
+     * attach/enumerate state machine) until the drive attaches and mounts,
+     * or a timeout elapses, so this call may take a while or simply fail
+     * with kStorage_Error if nothing is plugged in. */
+    const storage_ops_t *usbMsd = STORAGE_GetOps(kStorageFs_FatFs, kStorageDevice_Usb0);
+
+    if (usbMsd == NULL)
+    {
+        PRINTF("Storage (FatFs, Usb0) not available (not probed/registered)\r\n");
+    }
+    else
+    {
+        storage_status_t usbMsdStatus = usbMsd->init();
+
+        if (usbMsdStatus != kStorage_Success)
+        {
+            PRINTF("USB MSD mount failed (status=%d) - is a USB drive plugged in?\r\n", (int)usbMsdStatus);
+        }
+        else
+        {
+            usbMsdStatus = RunUsbMsdFileTestManual(usbMsd);
+            if (usbMsdStatus != kStorage_Success)
+            {
+                PRINTF("USB MSD file test failed, status=%d\r\n", (int)usbMsdStatus);
+            }
+        }
+
     }
 
     while (1)

@@ -71,9 +71,12 @@ typedef enum _storage_device_type
     kStorageDevice_Sd0 = 0,  /*!< First/only SD card slot (USDHC + fsl_sd). */
     kStorageDevice_QspiNor0, /*!< On-board QSPI/FlexSPI NOR flash. */
     kStorageDevice_RamDisk0, /*!< In-memory RAM disk (no real hardware). */
+    kStorageDevice_Usb0,     /*!< First/only USB host MSD (EHCI + usb_host_msd). */
     kStorageDevice_Count     /*!< Not a real value; number of device types defined above. */
 
 } storage_device_type_t;
+
+
 
 
 /*!
@@ -160,14 +163,14 @@ typedef struct _storage_ops
 /*******************************************************************************
  * Registry API
  *
- * A small, static, Linux-"probe"-style registry: each backend exposes a
- * probe function (e.g. STORAGE_FatFsSd_Probe()) that attempts to bring up
- * its hardware/dependencies and, on success, calls STORAGE_RegisterOps() to
- * publish its ops table under a (fs, device) key. STORAGE_ProbeAll() calls
- * every known backend's probe function once, typically early in main().
- * The application then looks up ops via STORAGE_GetOps() and never needs
- * to know backend-specific function names.
+ * A small, static registry: each backend registers its ops table for a
+ * given (fs, device) key by defining a constructor function (see the
+ * __attribute__((constructor)) functions at the bottom of each backend's
+ * .c file), which runs automatically before main() and calls
+ * STORAGE_RegisterOps(). The application then looks up ops via
+ * STORAGE_GetOps() and never needs to know backend-specific function names.
  ******************************************************************************/
+
 
 /*!
  * @brief Registers a backend's ops table for a given (fs, device) pair.
@@ -186,16 +189,8 @@ typedef struct _storage_ops
 void STORAGE_RegisterOps(storage_fs_type_t fs, storage_device_type_t device, const storage_ops_t *ops);
 
 /*!
- * @brief Probes every known backend once, registering those that succeed.
- *
- * Intended to be called once, early at application start-up (e.g. the
- * first lines of main(), after basic board/clock init). Safe to call more
- * than once; later calls simply re-probe and re-register.
- */
-void STORAGE_ProbeAll(void);
-
-/*!
  * @brief Looks up a previously registered ops table.
+
  *
  * @param fs     Filesystem type being requested.
  * @param device Device type being requested.
