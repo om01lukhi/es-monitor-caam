@@ -167,16 +167,14 @@ static void UsbMsd_ClockInit(void)
         BOARD_USB_PHY_TXCAL45DM,
     };
     usbClockFreq = 24000000;
-    if (CONTROLLER_ID == kUSB_ControllerEhci0)
-    {
+    if (CONTROLLER_ID == kUSB_ControllerEhci0) {
         CLOCK_EnableUsbhs0PhyPllClock(kCLOCK_Usbphy480M, usbClockFreq);
         CLOCK_EnableUsbhs0Clock(kCLOCK_Usb480M, usbClockFreq);
-    }
-    else
-    {
+    } else {
         CLOCK_EnableUsbhs1PhyPllClock(kCLOCK_Usbphy480M, usbClockFreq);
         CLOCK_EnableUsbhs1Clock(kCLOCK_Usb480M, usbClockFreq);
     }
+
     USB_EhciPhyInit(CONTROLLER_ID, BOARD_XTAL0_CLK_HZ, &phyConfig);
 }
 
@@ -204,11 +202,11 @@ static void USB_HostMsdControlCallback(void *param, uint8_t *data, uint32_t data
 {
     usb_msd_instance_t *inst = (usb_msd_instance_t *)param;
 
-    if (inst->runWaitState == kUsbMsdRun_WaitSetInterface)
-    {
+    if (inst->runWaitState == kUsbMsdRun_WaitSetInterface) {
         inst->runWaitState = kUsbMsdRun_Idle;
         inst->runState     = kUsbMsdRun_Ready;
     }
+
     s_controlIng    = 0;
     s_controlStatus = status;
 }
@@ -229,35 +227,30 @@ static usb_status_t UsbMsd_HostEvent(usb_device_handle deviceHandle,
 
     PRINTF("USB MSD host event=0x%08x\r\n", (unsigned)eventCode);
 
-    switch (eventId)
-    {
+    switch (eventId) {
         case kUSB_HostEventAttach:
             configuration = (usb_host_configuration_t *)configurationHandle;
-            for (interfaceIndex = 0; interfaceIndex < configuration->interfaceCount; ++interfaceIndex)
-            {
+            for (interfaceIndex = 0; interfaceIndex < configuration->interfaceCount; ++interfaceIndex) {
                 interface = &configuration->interfaceList[interfaceIndex];
                 id        = interface->interfaceDesc->bInterfaceClass;
                 if (id != USB_HOST_MSD_CLASS_CODE)
-                {
                     continue;
-                }
+
                 id = interface->interfaceDesc->bInterfaceSubClass;
                 if ((id != USB_HOST_MSD_SUBCLASS_CODE_UFI) && (id != USB_HOST_MSD_SUBCLASS_CODE_SCSI))
-                {
                     continue;
-                }
+
                 id = interface->interfaceDesc->bInterfaceProtocol;
                 if (id != USB_HOST_MSD_PROTOCOL_BULK)
-                {
                     continue;
-                }
-                if (s_msdInstance.deviceState == kUsbMsdDev_Idle)
-                {
+
+                if (s_msdInstance.deviceState == kUsbMsdDev_Idle) {
                     s_msdInstance.deviceHandle    = deviceHandle;
                     s_msdInstance.interfaceHandle = interface;
                     s_msdInstance.configHandle    = configurationHandle;
                     return kStatus_USB_Success;
                 }
+
                 continue;
             }
             status = kStatus_USB_NotSupported;
@@ -267,12 +260,9 @@ static usb_status_t UsbMsd_HostEvent(usb_device_handle deviceHandle,
             break;
 
         case kUSB_HostEventEnumerationDone:
-            if (s_msdInstance.configHandle == configurationHandle)
-            {
-                if ((s_msdInstance.deviceHandle != NULL) && (s_msdInstance.interfaceHandle != NULL))
-                {
-                    if (s_msdInstance.deviceState == kUsbMsdDev_Idle)
-                    {
+            if (s_msdInstance.configHandle == configurationHandle) {
+                if ((s_msdInstance.deviceHandle != NULL) && (s_msdInstance.interfaceHandle != NULL)) {
+                    if (s_msdInstance.deviceState == kUsbMsdDev_Idle) {
                         s_msdInstance.deviceState = kUsbMsdDev_Attached;
 
                         USB_HostHelperGetPeripheralInformation(deviceHandle, kUSB_HostGetDevicePID, &infoValue);
@@ -281,9 +271,7 @@ static usb_status_t UsbMsd_HostEvent(usb_device_handle deviceHandle,
                         PRINTF("vid=0x%x ", (unsigned)infoValue);
                         USB_HostHelperGetPeripheralInformation(deviceHandle, kUSB_HostGetDeviceAddress, &infoValue);
                         PRINTF("address=%u\r\n", (unsigned)infoValue);
-                    }
-                    else
-                    {
+                    } else {
                         status = kStatus_USB_Error;
                     }
                 }
@@ -291,14 +279,12 @@ static usb_status_t UsbMsd_HostEvent(usb_device_handle deviceHandle,
             break;
 
         case kUSB_HostEventDetach:
-            if (s_msdInstance.configHandle == configurationHandle)
-            {
+            if (s_msdInstance.configHandle == configurationHandle) {
                 g_UsbFatfsClassHandle   = NULL;
                 s_msdInstance.configHandle = NULL;
+
                 if (s_msdInstance.deviceState != kUsbMsdDev_Idle)
-                {
                     s_msdInstance.deviceState = kUsbMsdDev_Detached;
-                }
             }
             break;
         
@@ -320,19 +306,17 @@ static void UsbMsd_Task(void)
 {
     usb_status_t status;
 
-    if (s_msdInstance.deviceState != s_msdInstance.prevDeviceState)
-    {
+    if (s_msdInstance.deviceState != s_msdInstance.prevDeviceState) {
         s_msdInstance.prevDeviceState = s_msdInstance.deviceState;
-        switch (s_msdInstance.deviceState)
-        {
+        switch (s_msdInstance.deviceState) {
             case kUsbMsdDev_Idle:
                 break;
 
             case kUsbMsdDev_Attached:
                 status = USB_HostMsdInit(s_msdInstance.deviceHandle, &s_msdInstance.classHandle);
                 g_UsbFatfsClassHandle = s_msdInstance.classHandle;
-                if (status != kStatus_USB_Success)
-                {
+
+                if (status != kStatus_USB_Success) {
                     PRINTF("USB host MSD init failed\r\n");
                     return;
                 }
@@ -352,8 +336,7 @@ static void UsbMsd_Task(void)
         }
     }
 
-    switch (s_msdInstance.runState)
-    {
+    switch (s_msdInstance.runState) {
         case kUsbMsdRun_Idle:
             break;
 
@@ -362,8 +345,7 @@ static void UsbMsd_Task(void)
             s_msdInstance.runWaitState = kUsbMsdRun_WaitSetInterface;
             status = USB_HostMsdSetInterface(s_msdInstance.classHandle, s_msdInstance.interfaceHandle, 0,
                                               USB_HostMsdControlCallback, &s_msdInstance);
-            if (status != kStatus_USB_Success)
-            {
+            if (status != kStatus_USB_Success) {
                 PRINTF("USB host MSD set interface failed\r\n");
             }
             break;
@@ -384,9 +366,7 @@ static storage_status_t UsbMsd_Init(void)
     uint32_t elapsedMs;
 
     if (s_mounted)
-    {
         return kStorage_Success;
-    }
 
     memset(&s_msdInstance, 0, sizeof(s_msdInstance));
 
@@ -398,8 +378,7 @@ static storage_status_t UsbMsd_Init(void)
 
     usbStatus = USB_HostInit(CONTROLLER_ID, &g_HostHandle, UsbMsd_HostEvent);
 
-    if (usbStatus != kStatus_USB_Success)
-    {
+    if (usbStatus != kStatus_USB_Success) {
         PRINTF("USB host init failed (status=%d)\r\n", (int)usbStatus);
         return kStorage_Error;
     }
@@ -409,27 +388,23 @@ static storage_status_t UsbMsd_Init(void)
 
     /* Poll long enough for USB attach debounce and asynchronous enumeration
      * to complete, while continuing to service the EHCI state machine. */
-    for (elapsedMs = 0U; elapsedMs < USB_MSD_MOUNT_TIMEOUT_MS; elapsedMs++)
-    {
+    for (elapsedMs = 0U; elapsedMs < USB_MSD_MOUNT_TIMEOUT_MS; elapsedMs++) {
         UsbMsd_TaskFn();
         UsbMsd_Task();
         if (s_msdInstance.runState == kUsbMsdRun_Ready)
-        {
             break;
-        }
+
         SDK_DelayAtLeastUs(1000U, SystemCoreClock);
     }
 
-    if (s_msdInstance.runState != kUsbMsdRun_Ready)
-    {
+    if (s_msdInstance.runState != kUsbMsdRun_Ready) {
         PRINTF("USB MSD device did not attach/enumerate within timeout\r\n");
         return kStorage_Error;
     }
 
     PRINTF("USB MSD device ready, mounting FatFs...\r\n");
 
-    if (f_mount(&s_fileSystem, s_usbDrive, 0U) != FR_OK)
-    {
+    if (f_mount(&s_fileSystem, s_usbDrive, 0U) != FR_OK) {
         PRINTF("USB MSD FatFs mount failed\r\n");
         return kStorage_Error;
     }
@@ -443,15 +418,12 @@ static storage_status_t UsbMsd_PrefixPath(const char *path, char *out, size_t ou
     int n;
 
     if ((path == NULL) || (out == NULL))
-    {
         return kStorage_InvalidParameter;
-    }
 
     n = snprintf(out, outSize, "%c:%s", (char)(USBDISK + '0'), path);
     if ((n < 0) || ((size_t)n >= outSize))
-    {
         return kStorage_InvalidParameter;
-    }
+
     return kStorage_Success;
 }
 
@@ -463,22 +435,16 @@ static storage_status_t UsbMsd_Open(const char *path, storage_open_mode_t mode, 
     storage_status_t ret;
 
     if ((path == NULL) || (outFile == NULL))
-    {
         return kStorage_InvalidParameter;
-    }
+
     if (!s_mounted)
-    {
         return kStorage_NotMounted;
-    }
 
     ret = UsbMsd_PrefixPath(path, prefixed, sizeof(prefixed));
     if (ret != kStorage_Success)
-    {
         return ret;
-    }
 
-    switch (mode)
-    {
+    switch (mode) {
         case kStorage_OpenRead:
             ffMode = FA_READ;
             break;
@@ -491,12 +457,9 @@ static storage_status_t UsbMsd_Open(const char *path, storage_open_mode_t mode, 
 
     file = (storage_file_t *)malloc(sizeof(storage_file_t));
     if (file == NULL)
-    {
         return kStorage_OutOfMemory;
-    }
 
-    if (f_open(&file->fil, prefixed, ffMode) != FR_OK)
-    {
+    if (f_open(&file->fil, prefixed, ffMode) != FR_OK) {
         free(file);
         return kStorage_OpenFailed;
     }
@@ -511,16 +474,12 @@ static storage_status_t UsbMsd_Read(storage_file_t *file, uint8_t *buf, size_t b
     FRESULT res;
 
     if ((file == NULL) || (buf == NULL))
-    {
         return kStorage_InvalidParameter;
-    }
 
     res = f_read(&file->fil, buf, (UINT)bufSize, &br);
 
     if (bytesRead != NULL)
-    {
         *bytesRead = (size_t)br;
-    }
 
     return (res == FR_OK) ? kStorage_Success : kStorage_ReadFailed;
 }
@@ -531,21 +490,15 @@ static storage_status_t UsbMsd_Write(storage_file_t *file, const uint8_t *buf, s
     FRESULT res;
 
     if ((file == NULL) || (buf == NULL))
-    {
         return kStorage_InvalidParameter;
-    }
 
     res = f_write(&file->fil, buf, (UINT)size, &bw);
 
     if (bytesWritten != NULL)
-    {
         *bytesWritten = (size_t)bw;
-    }
 
     if ((res != FR_OK) || (bw != (UINT)size))
-    {
         return kStorage_WriteFailed;
-    }
 
     return kStorage_Success;
 }
@@ -555,9 +508,7 @@ static storage_status_t UsbMsd_Close(storage_file_t *file)
     FRESULT res;
 
     if (file == NULL)
-    {
         return kStorage_InvalidParameter;
-    }
 
     res = f_close(&file->fil);
     free(file);
@@ -572,24 +523,17 @@ static storage_status_t UsbMsd_GetFileSize(const char *path, size_t *size)
     storage_status_t ret;
 
     if ((path == NULL) || (size == NULL))
-    {
         return kStorage_InvalidParameter;
-    }
+
     if (!s_mounted)
-    {
         return kStorage_NotMounted;
-    }
 
     ret = UsbMsd_PrefixPath(path, prefixed, sizeof(prefixed));
     if (ret != kStorage_Success)
-    {
         return ret;
-    }
 
     if (f_open(&file, prefixed, FA_READ) != FR_OK)
-    {
         return kStorage_OpenFailed;
-    }
 
     *size = (size_t)f_size(&file);
     (void)f_close(&file);
@@ -606,240 +550,6 @@ static storage_status_t UsbMsd_Deinit(void)
 }
 
 /*******************************************************************************
- * High-level workflow: runFileTest (read -> write -> verify)
- *
- * Mirrors storage_fatfs_sd.c's FatFsSd_RunFileTest(): built purely on top
- * of this file's own open()/read()/write()/close()/getFileSize() - never
- * touches FatFs/USB APIs directly.
- ******************************************************************************/
-
-typedef struct
-{
-    uint8_t *data;
-    size_t size;
-    void *raw;
-} usb_msd_buf_t;
-
-static void UsbMsd_FreeBuf(usb_msd_buf_t *buf)
-{
-    free(buf->raw);
-    buf->raw  = NULL;
-    buf->data = NULL;
-    buf->size = 0U;
-}
-
-static storage_status_t UsbMsd_ReadWholeFile(const char *path, size_t maxFileSize, usb_msd_buf_t *buf)
-{
-    storage_file_t *file = NULL;
-    storage_status_t status;
-    size_t fsize = 0U;
-    size_t br    = 0U;
-    void *raw;
-    uint8_t *aligned;
-    size_t allocSize;
-
-    buf->data = NULL;
-    buf->raw  = NULL;
-    buf->size = 0U;
-
-    status = UsbMsd_GetFileSize(path, &fsize);
-    if (status != kStorage_Success)
-    {
-        return status;
-    }
-
-    if (fsize == 0U)
-    {
-        return kStorage_Success;
-    }
-    if (fsize > maxFileSize)
-    {
-        return kStorage_FileTooLarge;
-    }
-
-    status = UsbMsd_Open(path, kStorage_OpenRead, &file);
-    if (status != kStorage_Success)
-    {
-        return status;
-    }
-
-    allocSize = ((fsize + USB_MSD_BUF_ALIGN - 1U) & ~((size_t)USB_MSD_BUF_ALIGN - 1U)) + USB_MSD_BUF_ALIGN;
-
-    raw = malloc(allocSize);
-    if (raw == NULL)
-    {
-        (void)UsbMsd_Close(file);
-        return kStorage_OutOfMemory;
-    }
-    aligned = (uint8_t *)(((uintptr_t)raw + USB_MSD_BUF_ALIGN - 1U) & ~((uintptr_t)USB_MSD_BUF_ALIGN - 1U));
-
-    status = UsbMsd_Read(file, aligned, fsize, &br);
-    (void)UsbMsd_Close(file);
-
-    if ((status != kStorage_Success) || (br != fsize))
-    {
-        free(raw);
-        return (status == kStorage_Success) ? kStorage_ReadFailed : status;
-    }
-
-    buf->raw  = raw;
-    buf->data = aligned;
-    buf->size = br;
-    return kStorage_Success;
-}
-
-static storage_status_t UsbMsd_WriteWholeFile(const char *path, const uint8_t *data, size_t size)
-{
-    storage_file_t *file = NULL;
-    storage_status_t status;
-    size_t written = 0U;
-    storage_status_t closeStatus;
-
-    status = UsbMsd_Open(path, kStorage_OpenWriteCreate, &file);
-    if (status != kStorage_Success)
-    {
-        return status;
-    }
-
-    status      = UsbMsd_Write(file, data, size, &written);
-    closeStatus = UsbMsd_Close(file);
-
-    if (status != kStorage_Success)
-    {
-        return status;
-    }
-    if (written != size)
-    {
-        return kStorage_WriteFailed;
-    }
-    return closeStatus;
-}
-
-#define USB_MSD_VERIFY_CHUNK (512U)
-
-static storage_status_t UsbMsd_VerifyFile(const char *path, const uint8_t *expected, size_t expectedSize,
-                                           bool *matched)
-{
-    SDK_ALIGN(static uint8_t s_verifyChunk[USB_MSD_VERIFY_CHUNK], USB_MSD_BUF_ALIGN);
-    storage_file_t *file = NULL;
-    storage_status_t status;
-    size_t offset = 0U;
-
-    *matched = false;
-
-    status = UsbMsd_Open(path, kStorage_OpenRead, &file);
-    if (status != kStorage_Success)
-    {
-        return status;
-    }
-
-    while (offset < expectedSize)
-    {
-        size_t want = expectedSize - offset;
-        size_t got  = 0U;
-
-        if (want > sizeof(s_verifyChunk))
-        {
-            want = sizeof(s_verifyChunk);
-        }
-
-        status = UsbMsd_Read(file, s_verifyChunk, want, &got);
-        if ((status != kStorage_Success) || (got != want))
-        {
-            (void)UsbMsd_Close(file);
-            return (status == kStorage_Success) ? kStorage_ReadFailed : status;
-        }
-
-        if (memcmp(s_verifyChunk, expected + offset, want) != 0)
-        {
-            (void)UsbMsd_Close(file);
-            return kStorage_Success;
-        }
-
-        offset += want;
-    }
-
-    (void)UsbMsd_Close(file);
-
-    {
-        size_t actualSize = 0U;
-        status             = UsbMsd_GetFileSize(path, &actualSize);
-        if ((status == kStorage_Success) && (actualSize == expectedSize))
-        {
-            *matched = true;
-        }
-    }
-
-    return kStorage_Success;
-}
-
-static storage_status_t UsbMsd_RunFileTest(const char *srcPath, const char *dstPath, size_t maxFileSize,
-                                            bool *matched)
-{
-    usb_msd_buf_t src = {0};
-    storage_status_t status;
-
-    if (matched != NULL)
-    {
-        *matched = false;
-    }
-    if ((srcPath == NULL) || (dstPath == NULL))
-    {
-        return kStorage_InvalidParameter;
-    }
-
-    status = UsbMsd_ReadWholeFile(srcPath, maxFileSize, &src);
-    if (status != kStorage_Success)
-    {
-        PRINTF("USB MSD read failed (open/size limit/malloc/read), status=%d\r\n", (int)status);
-        return status;
-    }
-
-    PRINTF("USB MSD: read %u bytes from %s\r\n", (unsigned)src.size, srcPath);
-
-    if ((src.data == NULL) || (src.size == 0U))
-    {
-        PRINTF("USB MSD: no data read from file to write\r\n");
-        UsbMsd_FreeBuf(&src);
-        return kStorage_Success;
-    }
-
-    status = UsbMsd_WriteWholeFile(dstPath, src.data, src.size);
-    if (status != kStorage_Success)
-    {
-        PRINTF("USB MSD write failed, status=%d\r\n", (int)status);
-        UsbMsd_FreeBuf(&src);
-        return status;
-    }
-    PRINTF("USB MSD: wrote %u bytes to %s\r\n", (unsigned)src.size, dstPath);
-
-    bool verified = false;
-    status         = UsbMsd_VerifyFile(dstPath, src.data, src.size, &verified);
-    if (status != kStorage_Success)
-    {
-        PRINTF("USB MSD verify read failed, status=%d\r\n", (int)status);
-        UsbMsd_FreeBuf(&src);
-        return status;
-    }
-
-    if (verified)
-    {
-        PRINTF("USB MSD verify OK: written file matches original data (%u bytes)\r\n", (unsigned)src.size);
-        if (matched != NULL)
-        {
-            *matched = true;
-        }
-    }
-    else
-    {
-        PRINTF("USB MSD verify FAILED: written file does not match original data\r\n");
-    }
-
-    UsbMsd_FreeBuf(&src);
-    return kStorage_Success;
-}
-
-/*******************************************************************************
  * Registration
  ******************************************************************************/
 
@@ -850,8 +560,7 @@ static const storage_ops_t s_usbMsdOps = {
     .write       = UsbMsd_Write,
     .close       = UsbMsd_Close,
     .getFileSize = UsbMsd_GetFileSize,
-    .deinit      = UsbMsd_Deinit,
-    .runFileTest = UsbMsd_RunFileTest,
+    .deinit      = UsbMsd_Deinit
 };
 
 /*!

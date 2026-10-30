@@ -97,9 +97,8 @@ static int LittleFsQspi_BlockRead(const struct lfs_config *c, lfs_block_t block,
     uint32_t flashAddr = LITTLEFS_QSPI_START_ADDR + (block * c->block_size) + off;
 
     if (mflash_drv_read(flashAddr, buffer, size) != kStatus_Success)
-    {
         return LFS_ERR_IO;
-    }
+
     return LFS_ERR_OK;
 }
 
@@ -110,17 +109,12 @@ static int LittleFsQspi_BlockProg(const struct lfs_config *c, lfs_block_t block,
     status_t status    = kStatus_Success;
 
     if (!mflash_drv_is_page_aligned(size))
-    {
         return LFS_ERR_INVAL;
-    }
 
-    for (uint32_t pageOfs = 0U; pageOfs < size; pageOfs += MFLASH_PAGE_SIZE)
-    {
+    for (uint32_t pageOfs = 0U; pageOfs < size; pageOfs += MFLASH_PAGE_SIZE) {
         status = mflash_drv_page_program(flashAddr + pageOfs, (void *)((uintptr_t)buffer + pageOfs));
         if (status != kStatus_Success)
-        {
             break;
-        }
     }
 
     return (status == kStatus_Success) ? LFS_ERR_OK : LFS_ERR_IO;
@@ -131,13 +125,10 @@ static int LittleFsQspi_BlockErase(const struct lfs_config *c, lfs_block_t block
     uint32_t flashAddr = LITTLEFS_QSPI_START_ADDR + (block * c->block_size);
     status_t status    = kStatus_Success;
 
-    for (uint32_t sectorOfs = 0U; sectorOfs < c->block_size; sectorOfs += MFLASH_SECTOR_SIZE)
-    {
+    for (uint32_t sectorOfs = 0U; sectorOfs < c->block_size; sectorOfs += MFLASH_SECTOR_SIZE) {
         status = mflash_drv_sector_erase(flashAddr + sectorOfs);
         if (status != kStatus_Success)
-        {
             break;
-        }
     }
 
     return (status == kStatus_Success) ? LFS_ERR_OK : LFS_ERR_IO;
@@ -173,33 +164,27 @@ static storage_status_t LittleFsQspi_Init(void)
     int lfsResult;
 
     if (s_mounted)
-    {
         return kStorage_Success;
-    }
 
-    if (mflash_drv_init() != kStatus_Success)
-    {
+    if (mflash_drv_init() != kStatus_Success) {
         PRINTF("littlefs/QSPI: mflash_drv_init() failed\r\n");
         return kStorage_Error;
     }
 
     lfsResult = lfs_mount(&s_lfs, &s_lfsConfig);
-    if (lfsResult != LFS_ERR_OK)
-    {
+    if (lfsResult != LFS_ERR_OK) {
         /* Reserved region may be blank/corrupt (e.g. first boot) - format
          * then mount again, same fallback pattern as the RAM disk backend. */
         PRINTF("littlefs/QSPI: mount failed (err=%d) - formatting\r\n", lfsResult);
 
         lfsResult = lfs_format(&s_lfs, &s_lfsConfig);
-        if (lfsResult != LFS_ERR_OK)
-        {
+        if (lfsResult != LFS_ERR_OK) {
             PRINTF("littlefs/QSPI: lfs_format failed, err=%d\r\n", lfsResult);
             return kStorage_Error;
         }
 
         lfsResult = lfs_mount(&s_lfs, &s_lfsConfig);
-        if (lfsResult != LFS_ERR_OK)
-        {
+        if (lfsResult != LFS_ERR_OK) {
             PRINTF("littlefs/QSPI: mount after format failed, err=%d\r\n", lfsResult);
             return kStorage_Error;
         }
@@ -218,16 +203,12 @@ static storage_status_t LittleFsQspi_Open(const char *path, storage_open_mode_t 
     int lfsResult;
 
     if ((path == NULL) || (outFile == NULL))
-    {
         return kStorage_InvalidParameter;
-    }
-    if (!s_mounted)
-    {
-        return kStorage_NotMounted;
-    }
 
-    switch (mode)
-    {
+    if (!s_mounted)
+        return kStorage_NotMounted;
+
+    switch (mode) {
         case kStorage_OpenRead:
             flags = LFS_O_RDONLY;
             break;
@@ -240,13 +221,11 @@ static storage_status_t LittleFsQspi_Open(const char *path, storage_open_mode_t 
 
     file = (storage_file_t *)malloc(sizeof(storage_file_t));
     if (file == NULL)
-    {
         return kStorage_OutOfMemory;
-    }
+
 
     lfsResult = lfs_file_open(&s_lfs, &file->file, path, flags);
-    if (lfsResult != LFS_ERR_OK)
-    {
+    if (lfsResult != LFS_ERR_OK) {
         free(file);
         return kStorage_OpenFailed;
     }
@@ -260,16 +239,12 @@ static storage_status_t LittleFsQspi_Read(storage_file_t *file, uint8_t *buf, si
     lfs_ssize_t result;
 
     if ((file == NULL) || (buf == NULL))
-    {
         return kStorage_InvalidParameter;
-    }
 
     result = lfs_file_read(&s_lfs, &file->file, buf, (lfs_size_t)bufSize);
 
     if (bytesRead != NULL)
-    {
         *bytesRead = (result >= 0) ? (size_t)result : 0U;
-    }
 
     return (result >= 0) ? kStorage_Success : kStorage_ReadFailed;
 }
@@ -280,21 +255,15 @@ static storage_status_t LittleFsQspi_Write(storage_file_t *file, const uint8_t *
     lfs_ssize_t result;
 
     if ((file == NULL) || (buf == NULL))
-    {
         return kStorage_InvalidParameter;
-    }
 
     result = lfs_file_write(&s_lfs, &file->file, buf, (lfs_size_t)size);
 
     if (bytesWritten != NULL)
-    {
         *bytesWritten = (result >= 0) ? (size_t)result : 0U;
-    }
 
     if ((result < 0) || ((size_t)result != size))
-    {
         return kStorage_WriteFailed;
-    }
 
     return kStorage_Success;
 }
@@ -304,9 +273,7 @@ static storage_status_t LittleFsQspi_Close(storage_file_t *file)
     int lfsResult;
 
     if (file == NULL)
-    {
         return kStorage_InvalidParameter;
-    }
 
     lfsResult = lfs_file_close(&s_lfs, &file->file);
     free(file);
@@ -320,19 +287,14 @@ static storage_status_t LittleFsQspi_GetFileSize(const char *path, size_t *size)
     int lfsResult;
 
     if ((path == NULL) || (size == NULL))
-    {
         return kStorage_InvalidParameter;
-    }
+
     if (!s_mounted)
-    {
         return kStorage_NotMounted;
-    }
 
     lfsResult = lfs_stat(&s_lfs, path, &info);
     if (lfsResult != LFS_ERR_OK)
-    {
         return kStorage_OpenFailed;
-    }
 
     *size = (size_t)info.size;
     return kStorage_Success;
@@ -341,109 +303,9 @@ static storage_status_t LittleFsQspi_GetFileSize(const char *path, size_t *size)
 static storage_status_t LittleFsQspi_Deinit(void)
 {
     if (s_mounted)
-    {
         (void)lfs_unmount(&s_lfs);
-    }
+
     s_mounted = false;
-    return kStorage_Success;
-}
-
-/*******************************************************************************
- * High-level workflow: runFileTest (self-contained write -> read -> verify)
- *
- * Does not depend on srcPath existing anywhere (e.g. on the SD card); it
- * generates its own known test pattern, writes it to dstPath on the QSPI
- * littlefs partition, reads it back, and compares. srcPath is accepted for
- * interface compatibility with other backends but is otherwise unused here.
- ******************************************************************************/
-
-#define LITTLEFS_QSPI_TEST_PATTERN_SIZE (256U)
-
-static void LittleFsQspi_FillPattern(uint8_t *buf, size_t size)
-{
-    for (size_t i = 0U; i < size; i++)
-    {
-        buf[i] = (uint8_t)(i & 0xFFU);
-    }
-}
-
-static storage_status_t LittleFsQspi_RunFileTest(const char *srcPath, const char *dstPath, size_t maxFileSize,
-                                                  bool *matched)
-{
-    uint8_t testData[LITTLEFS_QSPI_TEST_PATTERN_SIZE];
-    uint8_t readBack[LITTLEFS_QSPI_TEST_PATTERN_SIZE];
-    storage_file_t *file = NULL;
-    storage_status_t status;
-    size_t written = 0U;
-    size_t read    = 0U;
-
-    (void)srcPath; /* self-contained test: no external source file needed */
-    (void)maxFileSize;
-
-    if (matched != NULL)
-    {
-        *matched = false;
-    }
-    if (dstPath == NULL)
-    {
-        return kStorage_InvalidParameter;
-    }
-
-    LittleFsQspi_FillPattern(testData, sizeof(testData));
-
-    /* 1) Write known test data (open -> write -> close). */
-    status = LittleFsQspi_Open(dstPath, kStorage_OpenWriteCreate, &file);
-    if (status != kStorage_Success)
-    {
-        PRINTF("littlefs/QSPI write-open failed, status=%d\r\n", (int)status);
-        return status;
-    }
-
-    status = LittleFsQspi_Write(file, testData, sizeof(testData), &written);
-    (void)LittleFsQspi_Close(file);
-    file = NULL;
-
-    if ((status != kStorage_Success) || (written != sizeof(testData)))
-    {
-        PRINTF("littlefs/QSPI write failed, status=%d\r\n", (int)status);
-        return (status == kStorage_Success) ? kStorage_WriteFailed : status;
-    }
-    PRINTF("littlefs/QSPI: wrote %u bytes to %s\r\n", (unsigned)written, dstPath);
-
-    /* 2) Read it back (open -> read -> close). */
-    status = LittleFsQspi_Open(dstPath, kStorage_OpenRead, &file);
-    if (status != kStorage_Success)
-    {
-        PRINTF("littlefs/QSPI read-open failed, status=%d\r\n", (int)status);
-        return status;
-    }
-
-    status = LittleFsQspi_Read(file, readBack, sizeof(readBack), &read);
-    (void)LittleFsQspi_Close(file);
-    file = NULL;
-
-    if ((status != kStorage_Success) || (read != sizeof(testData)))
-    {
-        PRINTF("littlefs/QSPI read failed, status=%d\r\n", (int)status);
-        return (status == kStorage_Success) ? kStorage_ReadFailed : status;
-    }
-    PRINTF("littlefs/QSPI: read back %u bytes from %s\r\n", (unsigned)read, dstPath);
-
-    /* 3) Verify. */
-    if (memcmp(testData, readBack, sizeof(testData)) == 0)
-    {
-        PRINTF("littlefs/QSPI verify OK: read-back data matches written pattern (%u bytes)\r\n",
-               (unsigned)sizeof(testData));
-        if (matched != NULL)
-        {
-            *matched = true;
-        }
-    }
-    else
-    {
-        PRINTF("littlefs/QSPI verify FAILED: read-back data does not match written pattern\r\n");
-    }
-
     return kStorage_Success;
 }
 
@@ -459,7 +321,6 @@ static const storage_ops_t s_littleFsQspiOps = {
     .close       = LittleFsQspi_Close,
     .getFileSize = LittleFsQspi_GetFileSize,
     .deinit      = LittleFsQspi_Deinit,
-    .runFileTest = LittleFsQspi_RunFileTest,
 };
 
 /*!

@@ -30,42 +30,26 @@
 static const storage_ops_t *s_registry[kStorageFs_Count][kStorageDevice_Count];
 
 /*******************************************************************************
- * Backend probe function declarations
- *
- * Each backend .c file implements one of these. Add a new line here (and a
- * call to it from STORAGE_ProbeAll()) when adding a new backend - nothing
- * else in this file needs to change.
- ******************************************************************************/
-
-extern void STORAGE_FatFsSd_Probe(void);
-extern void STORAGE_LittleFsQspi_Probe(void);
-extern void STORAGE_FatFsRamDisk_Probe(void);
-
-/*******************************************************************************
  * Code
  ******************************************************************************/
 
 void STORAGE_RegisterOps(storage_fs_type_t fs, storage_device_type_t device, const storage_ops_t *ops)
 {
     if ((fs >= kStorageFs_Count) || (device >= kStorageDevice_Count) || (ops == NULL))
-    {
         return;
-    }
 
-    if (s_registry[fs][device] != NULL)
-    {
+    if (s_registry[fs][device] != NULL) {
         PRINTF("WARNING: Storage ops already assigned for FS %d, Device %d. Assignment skipped.\n", fs, device);
         return;
     }
+
     s_registry[fs][device] = ops;
 }
 
 const storage_ops_t *STORAGE_GetOps(storage_fs_type_t fs, storage_device_type_t device)
 {
     if ((fs >= kStorageFs_Count) || (device >= kStorageDevice_Count))
-    {
         return NULL;
-    }
 
     return s_registry[fs][device];
 }

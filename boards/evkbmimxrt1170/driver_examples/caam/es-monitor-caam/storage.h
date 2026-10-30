@@ -142,22 +142,6 @@ typedef struct _storage_ops
      */
     storage_status_t (*deinit)(void);
 
-    /*!
-     * @brief Runs the "read srcPath -> write dstPath -> verify" workflow
-     * entirely inside the backend, using only open()/read()/write()/close()
-     * internally (every read and every write is wrapped by its own
-     * open()/close() pair). Allocates and frees its own working buffer;
-     * never leaks a file handle or allocation on any failure path.
-     *
-     * @param srcPath Path of the file to read (e.g. "/T64K.BIN").
-     * @param dstPath Path of the file to write a copy to (e.g. "/test.bin").
-     * @param maxFileSize Largest file size, in bytes, this call will accept
-     *                    (bounds the internal allocation).
-     * @param matched Optional, if non-NULL receives true if dstPath was
-     *                verified to match srcPath byte-for-byte, false
-     *                otherwise (including when the test could not run).
-     */
-    storage_status_t (*runFileTest)(const char *srcPath, const char *dstPath, size_t maxFileSize, bool *matched);
 } storage_ops_t;
 
 /*******************************************************************************
