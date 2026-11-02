@@ -36,7 +36,7 @@
 #define STORAGE_TEST_VERIFY_CHUNK    (512U)
 /* Small write-pattern test used on backends that start empty (RAM disk,
  * littlefs/QSPI): a simple incrementing byte sequence of this length. */
-#define STORAGE_TEST_PATTERN_PATH    "/storage_test.bin"
+#define STORAGE_TEST_PATTERN_PATH    "/storetest.bin"
 #define STORAGE_TEST_PATTERN_SIZE    (128U)
 
 /*******************************************************************************
