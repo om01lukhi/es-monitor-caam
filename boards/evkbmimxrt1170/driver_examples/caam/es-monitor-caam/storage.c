@@ -33,7 +33,7 @@ static const storage_ops_t *s_registry[kStorageFs_Count][kStorageDevice_Count];
  * Code
  ******************************************************************************/
 
-void STORAGE_RegisterOps(storage_fs_type_t fs, storage_device_type_t device, const storage_ops_t *ops)
+void storage_register_ops(storage_fs_type_t fs, storage_device_type_t device, const storage_ops_t *ops)
 {
     if ((fs >= kStorageFs_Count) || (device >= kStorageDevice_Count) || (ops == NULL))
         return;
@@ -46,7 +46,7 @@ void STORAGE_RegisterOps(storage_fs_type_t fs, storage_device_type_t device, con
     s_registry[fs][device] = ops;
 }
 
-const storage_ops_t *STORAGE_GetOps(storage_fs_type_t fs, storage_device_type_t device)
+const storage_ops_t *storage_get_ops(storage_fs_type_t fs, storage_device_type_t device)
 {
     if ((fs >= kStorageFs_Count) || (device >= kStorageDevice_Count))
         return NULL;

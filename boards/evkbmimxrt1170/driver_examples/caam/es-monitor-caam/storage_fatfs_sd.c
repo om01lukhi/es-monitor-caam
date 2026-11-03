@@ -52,7 +52,7 @@ static bool s_mounted = false;
  * Low-level ops: init/open/read/write/close/getFileSize/deinit
  ******************************************************************************/
 
-static storage_status_t FatFsSd_Init(void)
+static storage_status_t fatfs_sd_init(void)
 {
     const TCHAR drive[3U] = {SDDISK + '0', ':', '/'};
 
@@ -82,7 +82,7 @@ static storage_status_t FatFsSd_Init(void)
     return kStorage_Success;
 }
 
-static storage_status_t FatFsSd_Open(const char *path, storage_open_mode_t mode, storage_file_t **outFile)
+static storage_status_t fatfs_sd_open(const char *path, storage_open_mode_t mode, storage_file_t **outFile)
 {
     BYTE ffMode;
     storage_file_t *file;
@@ -117,7 +117,7 @@ static storage_status_t FatFsSd_Open(const char *path, storage_open_mode_t mode,
     return kStorage_Success;
 }
 
-static storage_status_t FatFsSd_Read(storage_file_t *file, uint8_t *buf, size_t bufSize, size_t *bytesRead)
+static storage_status_t fatfs_sd_read(storage_file_t *file, uint8_t *buf, size_t bufSize, size_t *bytesRead)
 {
     UINT br = 0U;
     FRESULT res;
@@ -133,7 +133,7 @@ static storage_status_t FatFsSd_Read(storage_file_t *file, uint8_t *buf, size_t 
     return (res == FR_OK) ? kStorage_Success : kStorage_ReadFailed;
 }
 
-static storage_status_t FatFsSd_Write(storage_file_t *file, const uint8_t *buf, size_t size, size_t *bytesWritten)
+static storage_status_t fatfs_sd_write(storage_file_t *file, const uint8_t *buf, size_t size, size_t *bytesWritten)
 {
     UINT bw = 0U;
     FRESULT res;
@@ -152,7 +152,7 @@ static storage_status_t FatFsSd_Write(storage_file_t *file, const uint8_t *buf, 
     return kStorage_Success;
 }
 
-static storage_status_t FatFsSd_Close(storage_file_t *file)
+static storage_status_t fatfs_sd_close(storage_file_t *file)
 {
     FRESULT res;
 
@@ -165,7 +165,7 @@ static storage_status_t FatFsSd_Close(storage_file_t *file)
     return (res == FR_OK) ? kStorage_Success : kStorage_Error;
 }
 
-static storage_status_t FatFsSd_GetFileSize(const char *path, size_t *size)
+static storage_status_t fatfs_sd_get_filesize(const char *path, size_t *size)
 {
     FIL file;
 
@@ -184,7 +184,7 @@ static storage_status_t FatFsSd_GetFileSize(const char *path, size_t *size)
     return kStorage_Success;
 }
 
-static storage_status_t FatFsSd_Deinit(void)
+static storage_status_t fatfs_sd_deinit(void)
 {
     /* No explicit unmount API is used by this example; mark state so init()
      * can be called again if desired. */
@@ -197,13 +197,13 @@ static storage_status_t FatFsSd_Deinit(void)
  ******************************************************************************/
 
 static const storage_ops_t s_fatFsSdOps = {
-    .init        = FatFsSd_Init,
-    .open        = FatFsSd_Open,
-    .read        = FatFsSd_Read,
-    .write       = FatFsSd_Write,
-    .close       = FatFsSd_Close,
-    .getFileSize = FatFsSd_GetFileSize,
-    .deinit      = FatFsSd_Deinit,
+    .init        = fatfs_sd_init,
+    .open        = fatfs_sd_open,
+    .read        = fatfs_sd_read,
+    .write       = fatfs_sd_write,
+    .close       = fatfs_sd_close,
+    .getFileSize = fatfs_sd_get_filesize,
+    .deinit      = fatfs_sd_deinit,
 };
 
 /*!
@@ -218,7 +218,7 @@ static const storage_ops_t s_fatFsSdOps = {
  */
 
 static void __attribute__((constructor))
-STORAGE_IF_RegisterFatFsSd(void)
+storage_if_register_fatfs_sd(void)
 {
-    STORAGE_RegisterOps(kStorageFs_FatFs, kStorageDevice_Sd0, &s_fatFsSdOps);
+    storage_register_ops(kStorageFs_FatFs, kStorageDevice_Sd0, &s_fatFsSdOps);
 }

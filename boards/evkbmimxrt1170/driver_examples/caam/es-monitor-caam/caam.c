@@ -25,12 +25,29 @@
  * Storage test configuration
  ******************************************************************************/
 
-/* Source file expected on SD card and USB flash drive (must be pre-copied). */
+/* Source file: must already exist on the SD card and on the USB drive. */
 #define STORAGE_TEST_SRC_PATH        "/T64K.BIN"
-/* Destination written during the copy/verify step. */
+/* Destination file: created / overwritten by the write operation. */
 #define STORAGE_TEST_DST_PATH        "/test.bin"
-/* Upper bound on source file size; malloc() is bounded to this. */
+/* Upper bound on file size; malloc() is bounded to this. */
 #define STORAGE_TEST_MAX_FILE_SIZE   (64U * 1024U)
+
+/* Time given to the USB flash drive to power up and present itself before the
+ * first USB test. The USB backend only waits 2 s for the attach event, which
+ * is not enough if the drive is still starting up. Earlier test sequences
+ * gave the drive this time implicitly by running other tests first. */
+#define STORAGE_TEST_USB_SETTLE_US   (5000000U)
+
+/*! @brief Operation selected by the caller of RunStorageTest(). */
+typedef enum _storage_test_op
+{
+    kTestOp_Read = 0, /*!< Read STORAGE_TEST_SRC_PATH, print size and tail. */
+    kTestOp_Write,    /*!< Write an incrementing pattern to STORAGE_TEST_DST_PATH. */
+    kTestOp_Both      /*!< Read the source file, then write its data to STORAGE_TEST_DST_PATH. */
+} storage_test_op_t;
+
+/*! @brief Short label for (fs, device), used only in PRINTF log lines. */
+static const char *storage_label(storage_fs_type_t fs, storage_device_type_t dev)
 /* Chunk size used when reading back for verification (avoids a second
  * full-file heap allocation running concurrently with the first). */
 #define STORAGE_TEST_VERIFY_CHUNK    (512U)
@@ -68,225 +85,143 @@ static const char *StorageLabel(storage_fs_type_t fs, storage_device_type_t dev)
 }
 
 /*******************************************************************************
- * Unified storage test
+ * Storage test:  init -> file size -> malloc -> switch(op) -> cleanup
  *
- * Single entry point called from main() for every backend. Automatically
- * chooses the test strategy based on whether a pre-existing source file
- * (STORAGE_TEST_SRC_PATH) is present on the medium:
+ *   kTestOp_Read  - open src, read, close, print size and last 16 bytes
+ *   kTestOp_Write - fill buffer with a pattern, open dst, write, close
+ *   kTestOp_Both  - open src, read, close, then open dst, write, close
  *
- *   - File present (SD card, USB flash drive): read the source file into a
- *     heap buffer, write it to STORAGE_TEST_DST_PATH, then read the
- *     destination back in fixed-size chunks and compare against the
- *     in-memory buffer to verify the write.  Only one heap allocation
- *     (the source data buffer) is ever alive at a time; the verify step
- *     reuses a small stack-local chunk buffer to avoid a second same-size
- *     heap allocation which would exceed the bare-metal heap on this target.
- *
- *   - No file / empty medium (RAM disk, littlefs/QSPI - blank at every
- *     boot): write a 128-byte incrementing pattern to
- *     STORAGE_TEST_PATTERN_PATH, read it back into a second stack buffer,
- *     and memcmp the two. No heap allocation needed at all for this path.
+ * init() of a backend returns immediately if it is already initialized, so
+ * calling RunStorageTest() several times for the same device is fine.
  ******************************************************************************/
-static void RunStorageTest(storage_fs_type_t fs, storage_device_type_t dev)
+static void RunStorageTest(storage_fs_type_t fs, storage_device_type_t dev, storage_test_op_t op)
 {
-    const char *label          = StorageLabel(fs, dev);
-    const storage_ops_t *ops   = STORAGE_GetOps(fs, dev);
+    const char *label        = storage_label(fs, dev);
+    const storage_ops_t *ops = storage_get_ops(fs, dev);
+    storage_file_t *file     = NULL;
+    uint8_t *buf             = NULL;
+    size_t fileSize          = 0U;
+    size_t bytesIo           = 0U;
     storage_status_t ret;
 
-    /* 1. Look up registered backend. */
     if (ops == NULL) {
         PRINTF("[%s] not available (not registered)\r\n", label);
         return;
     }
 
-    /* 2. Init / mount. */
+    /* init */
     ret = ops->init();
     if (ret != kStorage_Success) {
         PRINTF("[%s] init failed (status=%d)\r\n", label, (int)ret);
         return;
     }
 
-    /* 3. Probe for a pre-existing source file to determine test strategy. */
-    size_t fileSize = 0U;
+    /* file size */
     ret = ops->getFileSize(STORAGE_TEST_SRC_PATH, &fileSize);
-    bool hasSrcFile = (ret == kStorage_Success) && (fileSize > 0U);
-
-    if (hasSrcFile) {
-        /*------------------------------------------------------------------
-         * When source file exists - read it, write a copy, verify.
-         * Used for SD card and USB flash drive which are pre-loaded with
-         * STORAGE_TEST_SRC_PATH before the test runs (T64K.bin).
-         *-----------------------------------------------------------------*/
-        storage_file_t *file = NULL;
-        uint8_t *buf         = NULL;
-        size_t bytesIo       = 0U;
-
-        if (fileSize > STORAGE_TEST_MAX_FILE_SIZE) {
-            PRINTF("[%s] source file too large (%u bytes, limit=%u)\r\n",
-                   label, (unsigned)fileSize, (unsigned)STORAGE_TEST_MAX_FILE_SIZE);
-            return;
-        }
-
-        buf = (uint8_t *)malloc(fileSize);
-        if (buf == NULL) {
-            PRINTF("[%s] malloc(%u) failed\r\n", label, (unsigned)fileSize);
-            return;
-        }
-
-        /* 3A-1: open + read source, close immediately after. */
-        ret = ops->open(STORAGE_TEST_SRC_PATH, kStorage_OpenRead, &file);
-        if (ret != kStorage_Success) {
-            PRINTF("[%s] open(%s) failed, status=%d\r\n", label, STORAGE_TEST_SRC_PATH, (int)ret);
-            free(buf);
-            return;
-        }
-
-        ret = ops->read(file, buf, fileSize, &bytesIo);
-        (void)ops->close(file);
-        file = NULL;
-
-        if ((ret != kStorage_Success) || (bytesIo != fileSize)) {
-            PRINTF("[%s] read(%s) failed, status=%d, got %u of %u bytes\r\n",
-                   label, STORAGE_TEST_SRC_PATH, (int)ret, (unsigned)bytesIo, (unsigned)fileSize);
-            free(buf);
-            return;
-        }
-
-        PRINTF("[%s] read %u bytes from %s\r\n", label, (unsigned)bytesIo, STORAGE_TEST_SRC_PATH);
-        PRINTF("[%s] last 16 bytes: ", label);
-        for (size_t i = (bytesIo > 16U) ? (bytesIo - 16U) : 0U; i < bytesIo; i++)
-            PRINTF("%02x ", (unsigned)buf[i]);
-
-        PRINTF("\r\n");
-
-        /* 3A-2: open + write destination, close immediately after. */
-        ret = ops->open(STORAGE_TEST_DST_PATH, kStorage_OpenWriteCreate, &file);
-        if (ret != kStorage_Success) {
-            PRINTF("[%s] open(%s) for write failed, status=%d\r\n", label, STORAGE_TEST_DST_PATH, (int)ret);
-            free(buf);
-            return;
-        }
-
-        ret = ops->write(file, buf, bytesIo, NULL);
-        (void)ops->close(file);
-        file = NULL;
-
-        if (ret != kStorage_Success) {
-            PRINTF("[%s] write(%s) failed, status=%d\r\n", label, STORAGE_TEST_DST_PATH, (int)ret);
-            free(buf);
-            return;
-        }
-
-        PRINTF("[%s] wrote %u bytes to %s\r\n", label, (unsigned)bytesIo, STORAGE_TEST_DST_PATH);
-
-        /* 3A-3: verify - read destination back in fixed-size chunks and
-         * compare against buf. No second full-size heap buffer needed. */
-        uint8_t verifyChunk[STORAGE_TEST_VERIFY_CHUNK];
-        size_t offset     = 0U;
-        bool verifyFailed = false;
-
-        ret = ops->open(STORAGE_TEST_DST_PATH, kStorage_OpenRead, &file);
-        if (ret != kStorage_Success) {
-            PRINTF("[%s] verify-open(%s) failed, status=%d\r\n", label, STORAGE_TEST_DST_PATH, (int)ret);
-            free(buf);
-            return;
-        }
-
-        while (offset < bytesIo) {
-            size_t want = bytesIo - offset;
-            size_t got  = 0U;
-
-            if (want > sizeof(verifyChunk))
-                want = sizeof(verifyChunk);
-
-            ret = ops->read(file, verifyChunk, want, &got);
-            if ((ret != kStorage_Success) || (got != want)) {
-                PRINTF("[%s] verify-read failed at offset %u, status=%d, got %u of %u\r\n",
-                       label, (unsigned)offset, (int)ret, (unsigned)got, (unsigned)want);
-                verifyFailed = true;
-                break;
-            }
-
-            if (memcmp(verifyChunk, buf + offset, want) != 0) {
-                PRINTF("[%s] verify mismatch at offset %u\r\n", label, (unsigned)offset);
-                verifyFailed = true;
-                break;
-            }
-
-            offset += want;
-        }
-
-        (void)ops->close(file);
-        free(buf);
-
-        if (!verifyFailed)
-            PRINTF("[%s] verify OK: %s matches %s (%u bytes)\r\n",
-                   label, STORAGE_TEST_DST_PATH, STORAGE_TEST_SRC_PATH, (unsigned)bytesIo);
-        else
-            PRINTF("[%s] verify FAILED\r\n", label);
-
-    } else {
-        /*------------------------------------------------------------------
-         * When testing RAM disk and QSPI : write a known pattern to a file named storage_test.bin created in
-         * required storage device, read back, and compare.
-         *-----------------------------------------------------------------*/
-        storage_file_t *file = NULL;
-        uint8_t writeBuf[STORAGE_TEST_PATTERN_SIZE];
-        uint8_t readBuf[STORAGE_TEST_PATTERN_SIZE];
-        size_t bytesIo = 0U;
-
-        for (size_t i = 0U; i < sizeof(writeBuf); i++)
-            writeBuf[i] = (uint8_t)(i & 0xFFU);
-
-        /* 3B-1: write pattern. */
-        ret = ops->open(STORAGE_TEST_PATTERN_PATH, kStorage_OpenWriteCreate, &file);
-        if (ret != kStorage_Success) {
-            PRINTF("[%s] open(%s) for write failed, status=%d\r\n",
-                   label, STORAGE_TEST_PATTERN_PATH, (int)ret);
-            return;
-        }
-
-        ret = ops->write(file, writeBuf, sizeof(writeBuf), &bytesIo);
-        (void)ops->close(file);
-        file = NULL;
-
-        if ((ret != kStorage_Success) || (bytesIo != sizeof(writeBuf))) {
-            PRINTF("[%s] write(%s) failed, status=%d, wrote %u of %u bytes\r\n",
-                   label, STORAGE_TEST_PATTERN_PATH, (int)ret,
-                   (unsigned)bytesIo, (unsigned)sizeof(writeBuf));
-            return;
-        }
-
-        PRINTF("[%s] wrote %u bytes to %s\r\n", label, (unsigned)bytesIo, STORAGE_TEST_PATTERN_PATH);
-
-        /* 3B-2: read back. */
-        ret = ops->open(STORAGE_TEST_PATTERN_PATH, kStorage_OpenRead, &file);
-        if (ret != kStorage_Success) {
-            PRINTF("[%s] open(%s) for read failed, status=%d\r\n",
-                   label, STORAGE_TEST_PATTERN_PATH, (int)ret);
-            return;
-        }
-
-        ret = ops->read(file, readBuf, sizeof(readBuf), &bytesIo);
-        (void)ops->close(file);
-        file = NULL;
-
-        if ((ret != kStorage_Success) || (bytesIo != sizeof(readBuf))) {
-            PRINTF("[%s] read(%s) failed, status=%d, got %u of %u bytes\r\n",
-                   label, STORAGE_TEST_PATTERN_PATH, (int)ret,
-                   (unsigned)bytesIo, (unsigned)sizeof(readBuf));
-            return;
-        }
-
-        PRINTF("[%s] read back %u bytes from %s\r\n", label, (unsigned)bytesIo, STORAGE_TEST_PATTERN_PATH);
-
-        /* 3B-3: compare. */
-        if (memcmp(writeBuf, readBuf, sizeof(writeBuf)) == 0)
-            PRINTF("[%s] verify OK: read-back matches written pattern (%u bytes)\r\n",
-                   label, (unsigned)sizeof(writeBuf));
-        else
-            PRINTF("[%s] verify FAILED: read-back does not match written pattern\r\n", label);
+    if ((ret != kStorage_Success) || (fileSize == 0U) || (fileSize > STORAGE_TEST_MAX_FILE_SIZE)) {
+        PRINTF("[%s] %s missing or bad size (status=%d, size=%u)\r\n",
+               label, STORAGE_TEST_SRC_PATH, (int)ret, (unsigned)fileSize);
+        return;
     }
+
+    buf = (uint8_t *)malloc(fileSize);
+    if (buf == NULL) {
+        PRINTF("[%s] malloc(%u) failed\r\n", label, (unsigned)fileSize);
+        return;
+    }
+
+    /* operation */
+    switch (op) {
+        case kTestOp_Read:
+            ret = ops->open(STORAGE_TEST_SRC_PATH, kStorage_OpenRead, &file);
+            if (ret != kStorage_Success) {
+                PRINTF("[%s] open(%s) failed, status=%d\r\n", label, STORAGE_TEST_SRC_PATH, (int)ret);
+                break;
+            }
+            ret = ops->read(file, buf, fileSize, &bytesIo);
+            (void)ops->close(file);
+            file = NULL;
+            if ((ret != kStorage_Success) || (bytesIo != fileSize)) {
+                PRINTF("[%s] read failed, status=%d, got %u of %u bytes\r\n",
+                       label, (int)ret, (unsigned)bytesIo, (unsigned)fileSize);
+                break;
+            }
+            PRINTF("[%s] read %u bytes from %s\r\n", label, (unsigned)bytesIo, STORAGE_TEST_SRC_PATH);
+            PRINTF("[%s] last 16 bytes: ", label);
+            for (size_t i = (bytesIo > 16U) ? (bytesIo - 16U) : 0U; i < bytesIo; i++)
+                PRINTF("%02x ", (unsigned)buf[i]);
+            PRINTF("\r\n");
+            break;
+
+        case kTestOp_Write:
+            for (size_t i = 0U; i < fileSize; i++)
+                buf[i] = (uint8_t)i;
+            ret = ops->open(STORAGE_TEST_DST_PATH, kStorage_OpenWriteCreate, &file);
+            if (ret != kStorage_Success) {
+                PRINTF("[%s] open(%s) for write failed, status=%d\r\n", label, STORAGE_TEST_DST_PATH, (int)ret);
+                break;
+            }
+            ret = ops->write(file, buf, fileSize, &bytesIo);
+            (void)ops->close(file);
+            file = NULL;
+            if ((ret != kStorage_Success) || (bytesIo != fileSize)) {
+                PRINTF("[%s] write failed, status=%d, wrote %u of %u bytes\r\n",
+                       label, (int)ret, (unsigned)bytesIo, (unsigned)fileSize);
+                break;
+            }
+            PRINTF("[%s] wrote %u bytes to %s\r\n", label, (unsigned)bytesIo, STORAGE_TEST_DST_PATH);
+            break;
+
+        case kTestOp_Both:
+            /* read */
+            ret = ops->open(STORAGE_TEST_SRC_PATH, kStorage_OpenRead, &file);
+            if (ret != kStorage_Success) {
+                PRINTF("[%s] open(%s) failed, status=%d\r\n", label, STORAGE_TEST_SRC_PATH, (int)ret);
+                break;
+            }
+            ret = ops->read(file, buf, fileSize, &bytesIo);
+            (void)ops->close(file);
+            file = NULL;
+            if ((ret != kStorage_Success) || (bytesIo != fileSize)) {
+                PRINTF("[%s] read failed, status=%d, got %u of %u bytes\r\n",
+                       label, (int)ret, (unsigned)bytesIo, (unsigned)fileSize);
+                break;
+            }
+            PRINTF("[%s] read %u bytes from %s\r\n", label, (unsigned)bytesIo, STORAGE_TEST_SRC_PATH);
+
+            /* write */
+            ret = ops->open(STORAGE_TEST_DST_PATH, kStorage_OpenWriteCreate, &file);
+            if (ret != kStorage_Success) {
+                PRINTF("[%s] open(%s) for write failed, status=%d\r\n", label, STORAGE_TEST_DST_PATH, (int)ret);
+                break;
+            }
+            ret = ops->write(file, buf, fileSize, &bytesIo);
+            (void)ops->close(file);
+            file = NULL;
+            if ((ret != kStorage_Success) || (bytesIo != fileSize)) {
+                PRINTF("[%s] write failed, status=%d, wrote %u of %u bytes\r\n",
+                       label, (int)ret, (unsigned)bytesIo, (unsigned)fileSize);
+                break;
+            }
+            PRINTF("[%s] wrote %u bytes to %s\r\n", label, (unsigned)bytesIo, STORAGE_TEST_DST_PATH);
+            break;
+
+        default:
+            PRINTF("[%s] invalid operation %d\r\n", label, (int)op);
+            break;
+    }
+
+    /* cleanup */
+    if (file != NULL)
+        (void)ops->close(file);
+
+    /* deinit */
+    ret = ops->deinit();
+    if (ret != kStorage_Success) {
+        PRINTF("[%s] deinit failed (status=%d)\r\n", label, (int)ret);
+        return;
+    }
+    free(buf);
 }
 
 /*******************************************************************************
@@ -300,10 +235,9 @@ int main(void)
     BOARD_BootClockRUN();
     BOARD_InitDebugConsole();
 
-    RunStorageTest(kStorageFs_FatFs, kStorageDevice_Sd0);
-    RunStorageTest(kStorageFs_FatFs, kStorageDevice_RamDisk0);
-    RunStorageTest(kStorageFs_LittleFs, kStorageDevice_QspiNor0);
-    RunStorageTest(kStorageFs_FatFs, kStorageDevice_Usb0);
+    RunStorageTest(kStorageFs_FatFs, kStorageDevice_Sd0,  kTestOp_Write);
+    RunStorageTest(kStorageFs_FatFs, kStorageDevice_Usb0, kTestOp_Read);
+    RunStorageTest(kStorageFs_FatFs, kStorageDevice_Usb0, kTestOp_Both);
 
     while (1)
     {

@@ -158,7 +158,7 @@ void USB_OTG2_IRQHandler(void)
 }
 
 
-static void UsbMsd_ClockInit(void)
+static void usbmsd_clock_init(void)
 {
     uint32_t usbClockFreq;
     usb_phy_config_struct_t phyConfig = {
@@ -178,7 +178,7 @@ static void UsbMsd_ClockInit(void)
     USB_EhciPhyInit(CONTROLLER_ID, BOARD_XTAL0_CLK_HZ, &phyConfig);
 }
 
-static void UsbMsd_IsrEnable(void)
+static void usbmsd_isr_enable(void)
 {
     uint8_t irqNumber;
     uint8_t usbHostEhciIrq[] = USBHS_IRQS;
@@ -193,7 +193,7 @@ static void UsbMsd_IsrEnable(void)
     EnableIRQ((IRQn_Type)irqNumber);
 }
 
-static inline void UsbMsd_TaskFn(void)
+static inline void usbmsd_task_fn(void)
 {
     USB_HostEhciTaskFunction(g_HostHandle);
 }
@@ -213,7 +213,7 @@ static void USB_HostMsdControlCallback(void *param, uint8_t *data, uint32_t data
 
 /*! @brief Host callback: tracks attach/enumerate/detach of the MSD
  * interface, same logic as host_msd_fatfs.c's USB_HostMsdEvent(). */
-static usb_status_t UsbMsd_HostEvent(usb_device_handle deviceHandle,
+static usb_status_t usbmsd_host_event(usb_device_handle deviceHandle,
                                       usb_host_configuration_handle configurationHandle,
                                       uint32_t eventCode)
 {
@@ -302,7 +302,7 @@ static usb_status_t UsbMsd_HostEvent(usb_device_handle deviceHandle,
  * step, same logic as host_msd_fatfs.c's USB_HostMsdTask(), minus the
  * FatFs test code (this backend's init() does the FatFs mount itself,
  * once the device reaches kUsbMsdRun_Ready). */
-static void UsbMsd_Task(void)
+static void usbmsd_task(void)
 {
     usb_status_t status;
 
@@ -360,7 +360,7 @@ static void UsbMsd_Task(void)
 /*******************************************************************************
  * Low-level ops: init/open/read/write/close/getFileSize/deinit
  ******************************************************************************/
-static storage_status_t UsbMsd_Init(void)
+static storage_status_t usbmsd_init(void)
 {
     usb_status_t usbStatus;
     uint32_t elapsedMs;
@@ -370,27 +370,27 @@ static storage_status_t UsbMsd_Init(void)
 
     memset(&s_msdInstance, 0, sizeof(s_msdInstance));
 
-    UsbMsd_ClockInit();
+    usbmsd_clock_init();
 
 #if ((defined FSL_FEATURE_SOC_SYSMPU_COUNT) && (FSL_FEATURE_SOC_SYSMPU_COUNT))
     SYSMPU_Enable(SYSMPU, 0);
 #endif
 
-    usbStatus = USB_HostInit(CONTROLLER_ID, &g_HostHandle, UsbMsd_HostEvent);
+    usbStatus = USB_HostInit(CONTROLLER_ID, &g_HostHandle, usbmsd_host_event);
 
     if (usbStatus != kStatus_USB_Success) {
         PRINTF("USB host init failed (status=%d)\r\n", (int)usbStatus);
         return kStorage_Error;
     }
-    UsbMsd_IsrEnable();
+    usbmsd_isr_enable();
 
     PRINTF("USB host init done, waiting for MSD device attach...\r\n");
 
     /* Poll long enough for USB attach debounce and asynchronous enumeration
      * to complete, while continuing to service the EHCI state machine. */
     for (elapsedMs = 0U; elapsedMs < USB_MSD_MOUNT_TIMEOUT_MS; elapsedMs++) {
-        UsbMsd_TaskFn();
-        UsbMsd_Task();
+        usbmsd_task_fn();
+        usbmsd_task();
         if (s_msdInstance.runState == kUsbMsdRun_Ready)
             break;
 
@@ -413,7 +413,7 @@ static storage_status_t UsbMsd_Init(void)
     return kStorage_Success;
 }
 
-static storage_status_t UsbMsd_PrefixPath(const char *path, char *out, size_t outSize)
+static storage_status_t usbmsd_prefix_path(const char *path, char *out, size_t outSize)
 {
     int n;
 
@@ -427,7 +427,7 @@ static storage_status_t UsbMsd_PrefixPath(const char *path, char *out, size_t ou
     return kStorage_Success;
 }
 
-static storage_status_t UsbMsd_Open(const char *path, storage_open_mode_t mode, storage_file_t **outFile)
+static storage_status_t usbmsd_open(const char *path, storage_open_mode_t mode, storage_file_t **outFile)
 {
     BYTE ffMode;
     storage_file_t *file;
@@ -440,7 +440,7 @@ static storage_status_t UsbMsd_Open(const char *path, storage_open_mode_t mode, 
     if (!s_mounted)
         return kStorage_NotMounted;
 
-    ret = UsbMsd_PrefixPath(path, prefixed, sizeof(prefixed));
+    ret = usbmsd_prefix_path(path, prefixed, sizeof(prefixed));
     if (ret != kStorage_Success)
         return ret;
 
@@ -468,7 +468,7 @@ static storage_status_t UsbMsd_Open(const char *path, storage_open_mode_t mode, 
     return kStorage_Success;
 }
 
-static storage_status_t UsbMsd_Read(storage_file_t *file, uint8_t *buf, size_t bufSize, size_t *bytesRead)
+static storage_status_t usbmsd_read(storage_file_t *file, uint8_t *buf, size_t bufSize, size_t *bytesRead)
 {
     UINT br = 0U;
     FRESULT res;
@@ -484,7 +484,7 @@ static storage_status_t UsbMsd_Read(storage_file_t *file, uint8_t *buf, size_t b
     return (res == FR_OK) ? kStorage_Success : kStorage_ReadFailed;
 }
 
-static storage_status_t UsbMsd_Write(storage_file_t *file, const uint8_t *buf, size_t size, size_t *bytesWritten)
+static storage_status_t usbmsd_write(storage_file_t *file, const uint8_t *buf, size_t size, size_t *bytesWritten)
 {
     UINT bw = 0U;
     FRESULT res;
@@ -503,7 +503,7 @@ static storage_status_t UsbMsd_Write(storage_file_t *file, const uint8_t *buf, s
     return kStorage_Success;
 }
 
-static storage_status_t UsbMsd_Close(storage_file_t *file)
+static storage_status_t usbmsd_close(storage_file_t *file)
 {
     FRESULT res;
 
@@ -516,7 +516,7 @@ static storage_status_t UsbMsd_Close(storage_file_t *file)
     return (res == FR_OK) ? kStorage_Success : kStorage_Error;
 }
 
-static storage_status_t UsbMsd_GetFileSize(const char *path, size_t *size)
+static storage_status_t usbmsd_get_filesize(const char *path, size_t *size)
 {
     FIL file;
     char prefixed[64];
@@ -528,7 +528,7 @@ static storage_status_t UsbMsd_GetFileSize(const char *path, size_t *size)
     if (!s_mounted)
         return kStorage_NotMounted;
 
-    ret = UsbMsd_PrefixPath(path, prefixed, sizeof(prefixed));
+    ret = usbmsd_prefix_path(path, prefixed, sizeof(prefixed));
     if (ret != kStorage_Success)
         return ret;
 
@@ -541,7 +541,7 @@ static storage_status_t UsbMsd_GetFileSize(const char *path, size_t *size)
     return kStorage_Success;
 }
 
-static storage_status_t UsbMsd_Deinit(void)
+static storage_status_t usbmsd_deinit(void)
 {
     /* No explicit unmount API is used by this backend; mark state so
      * init() can be called again (e.g. after re-plugging the drive). */
@@ -554,13 +554,13 @@ static storage_status_t UsbMsd_Deinit(void)
  ******************************************************************************/
 
 static const storage_ops_t s_usbMsdOps = {
-    .init        = UsbMsd_Init,
-    .open        = UsbMsd_Open,
-    .read        = UsbMsd_Read,
-    .write       = UsbMsd_Write,
-    .close       = UsbMsd_Close,
-    .getFileSize = UsbMsd_GetFileSize,
-    .deinit      = UsbMsd_Deinit
+    .init        = usbmsd_init,
+    .open        = usbmsd_open,
+    .read        = usbmsd_read,
+    .write       = usbmsd_write,
+    .close       = usbmsd_close,
+    .getFileSize = usbmsd_get_filesize,
+    .deinit      = usbmsd_deinit
 };
 
 /*!
@@ -571,7 +571,7 @@ static const storage_ops_t s_usbMsdOps = {
  * and device-present check happens) is deferred to the caller.
  */
 static void __attribute__((constructor))
-STORAGE_IF_RegisterUsbMsd(void)
+storage_if_register_usbmsd(void)
 {
-    STORAGE_RegisterOps(kStorageFs_FatFs, kStorageDevice_Usb0, &s_usbMsdOps);
+    storage_register_ops(kStorageFs_FatFs, kStorageDevice_Usb0, &s_usbMsdOps);
 }

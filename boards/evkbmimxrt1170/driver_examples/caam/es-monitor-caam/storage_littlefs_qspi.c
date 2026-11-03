@@ -91,7 +91,7 @@ static bool s_mounted = false;
  * littlefs block-device callbacks (read/prog/erase/sync), backed by mflash_drv
  ******************************************************************************/
 
-static int LittleFsQspi_BlockRead(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, void *buffer,
+static int little_fs_qspi_blockread(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, void *buffer,
                                    lfs_size_t size)
 {
     uint32_t flashAddr = LITTLEFS_QSPI_START_ADDR + (block * c->block_size) + off;
@@ -102,7 +102,7 @@ static int LittleFsQspi_BlockRead(const struct lfs_config *c, lfs_block_t block,
     return LFS_ERR_OK;
 }
 
-static int LittleFsQspi_BlockProg(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, const void *buffer,
+static int little_fs_qspi_blockprog(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, const void *buffer,
                                    lfs_size_t size)
 {
     uint32_t flashAddr = LITTLEFS_QSPI_START_ADDR + (block * c->block_size) + off;
@@ -120,7 +120,7 @@ static int LittleFsQspi_BlockProg(const struct lfs_config *c, lfs_block_t block,
     return (status == kStatus_Success) ? LFS_ERR_OK : LFS_ERR_IO;
 }
 
-static int LittleFsQspi_BlockErase(const struct lfs_config *c, lfs_block_t block)
+static int little_fs_qspi_blockerase(const struct lfs_config *c, lfs_block_t block)
 {
     uint32_t flashAddr = LITTLEFS_QSPI_START_ADDR + (block * c->block_size);
     status_t status    = kStatus_Success;
@@ -134,7 +134,7 @@ static int LittleFsQspi_BlockErase(const struct lfs_config *c, lfs_block_t block
     return (status == kStatus_Success) ? LFS_ERR_OK : LFS_ERR_IO;
 }
 
-static int LittleFsQspi_BlockSync(const struct lfs_config *c)
+static int little_fs_qspi_blocksync(const struct lfs_config *c)
 {
     (void)c;
     return LFS_ERR_OK;
@@ -142,10 +142,10 @@ static int LittleFsQspi_BlockSync(const struct lfs_config *c)
 
 static const struct lfs_config s_lfsConfig = {
     .context     = NULL,
-    .read        = LittleFsQspi_BlockRead,
-    .prog        = LittleFsQspi_BlockProg,
-    .erase       = LittleFsQspi_BlockErase,
-    .sync        = LittleFsQspi_BlockSync,
+    .read        = little_fs_qspi_blockread,
+    .prog        = little_fs_qspi_blockprog,
+    .erase       = little_fs_qspi_blockerase,
+    .sync        = little_fs_qspi_blocksync,
     .read_size   = LITTLEFS_QSPI_READ_SIZE,
     .prog_size   = LITTLEFS_QSPI_PROG_SIZE,
     .block_size  = LITTLEFS_QSPI_BLOCK_SIZE,
@@ -159,7 +159,7 @@ static const struct lfs_config s_lfsConfig = {
  * Low-level ops: init/open/read/write/close/getFileSize/deinit
  ******************************************************************************/
 
-static storage_status_t LittleFsQspi_Init(void)
+static storage_status_t little_fs_qspi_init(void)
 {
     int lfsResult;
 
@@ -196,7 +196,7 @@ static storage_status_t LittleFsQspi_Init(void)
     return kStorage_Success;
 }
 
-static storage_status_t LittleFsQspi_Open(const char *path, storage_open_mode_t mode, storage_file_t **outFile)
+static storage_status_t little_fs_qspi_open(const char *path, storage_open_mode_t mode, storage_file_t **outFile)
 {
     storage_file_t *file;
     int flags;
@@ -234,7 +234,7 @@ static storage_status_t LittleFsQspi_Open(const char *path, storage_open_mode_t 
     return kStorage_Success;
 }
 
-static storage_status_t LittleFsQspi_Read(storage_file_t *file, uint8_t *buf, size_t bufSize, size_t *bytesRead)
+static storage_status_t little_fs_qspi_read(storage_file_t *file, uint8_t *buf, size_t bufSize, size_t *bytesRead)
 {
     lfs_ssize_t result;
 
@@ -249,7 +249,7 @@ static storage_status_t LittleFsQspi_Read(storage_file_t *file, uint8_t *buf, si
     return (result >= 0) ? kStorage_Success : kStorage_ReadFailed;
 }
 
-static storage_status_t LittleFsQspi_Write(storage_file_t *file, const uint8_t *buf, size_t size,
+static storage_status_t little_fs_qspi_write(storage_file_t *file, const uint8_t *buf, size_t size,
                                             size_t *bytesWritten)
 {
     lfs_ssize_t result;
@@ -268,7 +268,7 @@ static storage_status_t LittleFsQspi_Write(storage_file_t *file, const uint8_t *
     return kStorage_Success;
 }
 
-static storage_status_t LittleFsQspi_Close(storage_file_t *file)
+static storage_status_t little_fs_qspi_close(storage_file_t *file)
 {
     int lfsResult;
 
@@ -281,7 +281,7 @@ static storage_status_t LittleFsQspi_Close(storage_file_t *file)
     return (lfsResult == LFS_ERR_OK) ? kStorage_Success : kStorage_Error;
 }
 
-static storage_status_t LittleFsQspi_GetFileSize(const char *path, size_t *size)
+static storage_status_t little_fs_qspi_get_filesize(const char *path, size_t *size)
 {
     struct lfs_info info;
     int lfsResult;
@@ -300,7 +300,7 @@ static storage_status_t LittleFsQspi_GetFileSize(const char *path, size_t *size)
     return kStorage_Success;
 }
 
-static storage_status_t LittleFsQspi_Deinit(void)
+static storage_status_t little_fs_qspi_deinit(void)
 {
     if (s_mounted)
         (void)lfs_unmount(&s_lfs);
@@ -313,14 +313,14 @@ static storage_status_t LittleFsQspi_Deinit(void)
  * Registration / probe
  ******************************************************************************/
 
-static const storage_ops_t s_littleFsQspiOps = {
-    .init        = LittleFsQspi_Init,
-    .open        = LittleFsQspi_Open,
-    .read        = LittleFsQspi_Read,
-    .write       = LittleFsQspi_Write,
-    .close       = LittleFsQspi_Close,
-    .getFileSize = LittleFsQspi_GetFileSize,
-    .deinit      = LittleFsQspi_Deinit,
+static const storage_ops_t s_little_fs_qspi_ops = {
+    .init        = little_fs_qspi_init,
+    .open        = little_fs_qspi_open,
+    .read        = little_fs_qspi_read,
+    .write       = little_fs_qspi_write,
+    .close       = little_fs_qspi_close,
+    .getFileSize = little_fs_qspi_get_filesize,
+    .deinit      = little_fs_qspi_deinit,
 };
 
 /*!
@@ -332,7 +332,7 @@ static const storage_ops_t s_littleFsQspiOps = {
  * (kStorageFs_LittleFs, kStorageDevice_QspiNor0).
  */
 static void __attribute__((constructor))
-STORAGE_IF_RegisterLittleFsQspi(void)
+storage_if_register_littlefs_qspi(void)
 {
-    STORAGE_RegisterOps(kStorageFs_LittleFs, kStorageDevice_QspiNor0, &s_littleFsQspiOps);
+    storage_register_ops(kStorageFs_LittleFs, kStorageDevice_QspiNor0, &s_little_fs_qspi_ops);
 }

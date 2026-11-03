@@ -170,7 +170,7 @@ typedef struct _storage_ops
  *               registry only stores the pointer, it does not copy or
  *               free it.
  */
-void STORAGE_RegisterOps(storage_fs_type_t fs, storage_device_type_t device, const storage_ops_t *ops);
+void storage_register_ops(storage_fs_type_t fs, storage_device_type_t device, const storage_ops_t *ops);
 
 /*!
  * @brief Looks up a previously registered ops table.
@@ -182,6 +182,6 @@ void STORAGE_RegisterOps(storage_fs_type_t fs, storage_device_type_t device, con
  *         device) combination was never registered (not probed, or probe
  *         failed). Callers must check for NULL before using the result.
  */
-const storage_ops_t *STORAGE_GetOps(storage_fs_type_t fs, storage_device_type_t device);
+const storage_ops_t *storage_get_ops(storage_fs_type_t fs, storage_device_type_t device);
 
 #endif /* STORAGE_H_ */

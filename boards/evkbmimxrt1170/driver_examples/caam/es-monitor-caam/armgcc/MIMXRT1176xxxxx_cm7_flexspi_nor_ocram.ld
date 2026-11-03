@@ -51,7 +51,7 @@ MEMORY
 SECTIONS
 {
   __NCACHE_REGION_START = ORIGIN(m_data2);
-  __NCACHE_REGION_SIZE  = 0x2000;
+  __NCACHE_REGION_SIZE  = 0x4000;
 
   .flash_config :
   {

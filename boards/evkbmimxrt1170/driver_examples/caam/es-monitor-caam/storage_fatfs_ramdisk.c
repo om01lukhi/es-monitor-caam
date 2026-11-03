@@ -42,7 +42,7 @@ static bool s_mounted = false;
 
 /* Builds "<drive>:<path>" (e.g. "0:/test.bin") into out. Returns false if
  * path does not fit. Never relies on / changes FatFs's "current drive". */
-static bool FatFsRamDisk_BuildPath(const char *path, char *out, size_t outSize)
+static bool fatfs_ramdisk_build_path(const char *path, char *out, size_t outSize)
 {
     size_t pathLen = strlen(path);
 
@@ -63,7 +63,7 @@ static bool FatFsRamDisk_BuildPath(const char *path, char *out, size_t outSize)
  * Low-level ops: init/open/read/write/close/getFileSize/deinit
  ******************************************************************************/
 
-static storage_status_t FatFsRamDisk_Init(void)
+static storage_status_t fatfs_ramdisk_init(void)
 {
     const TCHAR drive[3U] = {FATFS_RAMDISK_DRIVE_NUM + '0', ':', '/'};
     FRESULT mountResult;
@@ -106,7 +106,7 @@ static storage_status_t FatFsRamDisk_Init(void)
     return kStorage_Success;
 }
 
-static storage_status_t FatFsRamDisk_Open(const char *path, storage_open_mode_t mode, storage_file_t **outFile)
+static storage_status_t fatfs_ramdisk_open(const char *path, storage_open_mode_t mode, storage_file_t **outFile)
 {
     char fullPath[FATFS_RAMDISK_MAX_PATH];
     BYTE ffMode;
@@ -119,7 +119,7 @@ static storage_status_t FatFsRamDisk_Open(const char *path, storage_open_mode_t 
     if (!s_mounted)
         return kStorage_NotMounted;
 
-    if (!FatFsRamDisk_BuildPath(path, fullPath, sizeof(fullPath)))
+    if (!fatfs_ramdisk_build_path(path, fullPath, sizeof(fullPath)))
         return kStorage_InvalidParameter;
 
     switch (mode) {
@@ -148,7 +148,7 @@ static storage_status_t FatFsRamDisk_Open(const char *path, storage_open_mode_t 
     return kStorage_Success;
 }
 
-static storage_status_t FatFsRamDisk_Read(storage_file_t *file, uint8_t *buf, size_t bufSize, size_t *bytesRead)
+static storage_status_t fatfs_ramdisk_read(storage_file_t *file, uint8_t *buf, size_t bufSize, size_t *bytesRead)
 {
     UINT br = 0U;
     FRESULT res;
@@ -164,7 +164,7 @@ static storage_status_t FatFsRamDisk_Read(storage_file_t *file, uint8_t *buf, si
     return (res == FR_OK) ? kStorage_Success : kStorage_ReadFailed;
 }
 
-static storage_status_t FatFsRamDisk_Write(storage_file_t *file, const uint8_t *buf, size_t size, size_t *bytesWritten)
+static storage_status_t fatfs_ramdisk_write(storage_file_t *file, const uint8_t *buf, size_t size, size_t *bytesWritten)
 {
     UINT bw = 0U;
     FRESULT res;
@@ -183,7 +183,7 @@ static storage_status_t FatFsRamDisk_Write(storage_file_t *file, const uint8_t *
     return kStorage_Success;
 }
 
-static storage_status_t FatFsRamDisk_Close(storage_file_t *file)
+static storage_status_t fatfs_ramdisk_close(storage_file_t *file)
 {
     FRESULT res;
 
@@ -196,7 +196,7 @@ static storage_status_t FatFsRamDisk_Close(storage_file_t *file)
     return (res == FR_OK) ? kStorage_Success : kStorage_Error;
 }
 
-static storage_status_t FatFsRamDisk_GetFileSize(const char *path, size_t *size)
+static storage_status_t fatfs_ramdisk_get_filesize(const char *path, size_t *size)
 {
     char fullPath[FATFS_RAMDISK_MAX_PATH];
     FIL file;
@@ -207,7 +207,7 @@ static storage_status_t FatFsRamDisk_GetFileSize(const char *path, size_t *size)
     if (!s_mounted)
         return kStorage_NotMounted;
 
-    if (!FatFsRamDisk_BuildPath(path, fullPath, sizeof(fullPath)))
+    if (!fatfs_ramdisk_build_path(path, fullPath, sizeof(fullPath)))
         return kStorage_InvalidParameter;
 
     if (f_open(&file, fullPath, FA_READ) != FR_OK)
@@ -219,7 +219,7 @@ static storage_status_t FatFsRamDisk_GetFileSize(const char *path, size_t *size)
     return kStorage_Success;
 }
 
-static storage_status_t FatFsRamDisk_Deinit(void)
+static storage_status_t fatfs_ramdisk_deinit(void)
 {
     /* RAM contents are discarded naturally on reset/power loss; just mark
      * the state so init() can mount again if desired. */
@@ -232,13 +232,13 @@ static storage_status_t FatFsRamDisk_Deinit(void)
  ******************************************************************************/
 
 static const storage_ops_t s_fatFsRamDiskOps = {
-    .init        = FatFsRamDisk_Init,
-    .open        = FatFsRamDisk_Open,
-    .read        = FatFsRamDisk_Read,
-    .write       = FatFsRamDisk_Write,
-    .close       = FatFsRamDisk_Close,
-    .getFileSize = FatFsRamDisk_GetFileSize,
-    .deinit      = FatFsRamDisk_Deinit,
+    .init        = fatfs_ramdisk_init,
+    .open        = fatfs_ramdisk_open,
+    .read        = fatfs_ramdisk_read,
+    .write       = fatfs_ramdisk_write,
+    .close       = fatfs_ramdisk_close,
+    .getFileSize = fatfs_ramdisk_get_filesize,
+    .deinit      = fatfs_ramdisk_deinit,
 };
 
 /*!
@@ -249,7 +249,7 @@ static const storage_ops_t s_fatFsRamDiskOps = {
  * backend's ops table under (kStorageFs_FatFs, kStorageDevice_RamDisk0).
  */
 static void __attribute__((constructor))
-STORAGE_IF_RegisterFatFsRamDisk(void)
+storage_if_register_fatfs_ramdisk(void)
 {
-    STORAGE_RegisterOps(kStorageFs_FatFs, kStorageDevice_RamDisk0, &s_fatFsRamDiskOps);
+    storage_register_ops(kStorageFs_FatFs, kStorageDevice_RamDisk0, &s_fatFsRamDiskOps);
 }
