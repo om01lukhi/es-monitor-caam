@@ -221,8 +221,13 @@ static storage_status_t fatfs_ramdisk_get_filesize(const char *path, size_t *siz
 
 static storage_status_t fatfs_ramdisk_deinit(void)
 {
-    /* RAM contents are discarded naturally on reset/power loss; just mark
-     * the state so init() can mount again if desired. */
+    const TCHAR drive[3U] = {FATFS_RAMDISK_DRIVE_NUM + '0', ':', '/'};
+
+    if (!s_mounted)
+        return kStorage_Success;
+
+    f_unmount(drive);
+
     s_mounted = false;
     return kStorage_Success;
 }

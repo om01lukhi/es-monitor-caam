@@ -121,6 +121,11 @@ static FATFS s_fileSystem;
 
 static bool s_mounted = false;
 
+/* Set true during usbmsd_deinit() so that usbmsd_host_event() silently
+ * discards all callbacks generated internally by USB_HostDeinit().
+ */
+static volatile bool s_deinitActive = false;
+
 /* control transfer on-going state/status, used by USB_HostMsdSetInterface's
  * callback - same pattern as the reference demo's controlIng/controlStatus. */
 static volatile uint8_t s_controlIng;
@@ -224,6 +229,15 @@ static usb_status_t usbmsd_host_event(usb_device_handle deviceHandle,
     usb_host_interface_t *interface;
     uint32_t infoValue = 0U;
     uint8_t id;
+
+    /* Suppress all callbacks that USB_HostDeinit() issues internally while
+     * tearing down its device list. DisableIRQ() stops new hardware-driven
+     * interrupts but does not prevent USB_HostDeinit() from walking its
+     * internal device list and issuing software callbacks synchronously,
+     * which is why repeated kUSB_HostEventDetach (event=0x2) lines appear
+     * without this guard even after DisableIRQ() has been called. */
+    if (s_deinitActive)
+        return kStatus_USB_Success;
 
     PRINTF("USB MSD host event=0x%08x\r\n", (unsigned)eventCode);
 
@@ -543,8 +557,44 @@ static storage_status_t usbmsd_get_filesize(const char *path, size_t *size)
 
 static storage_status_t usbmsd_deinit(void)
 {
-    /* No explicit unmount API is used by this backend; mark state so
-     * init() can be called again (e.g. after re-plugging the drive). */
+    uint8_t irqNumber;
+    uint8_t usbHostEhciIrq[] = USBHS_IRQS;
+
+    if (!s_mounted)
+        return kStorage_Success;
+
+    /* Unmount FatFs while the USB stack is still alive so that any
+     * pending diskio flush can complete through the still-valid class
+     * handle.
+     */
+    f_unmount(s_usbDrive);
+
+    /* Disable the EHCI IRQ BEFORE tearing down the host controller. */
+    irqNumber = usbHostEhciIrq[CONTROLLER_ID - kUSB_ControllerEhci0];
+    DisableIRQ((IRQn_Type)irqNumber);
+
+    s_deinitActive = true;
+
+    /* Tear down the MSD class layer (frees bulk transfer buffers and
+     * closes the class handle). Only call if we actually opened it.
+     */
+    if (s_msdInstance.classHandle != NULL) {
+        USB_HostMsdDeinit(s_msdInstance.deviceHandle, s_msdInstance.classHandle);
+        s_msdInstance.classHandle = NULL;
+        g_UsbFatfsClassHandle     = NULL;
+    }
+
+    /* Shut down the EHCI host controller. Any software callbacks it
+     * issues internally are suppressed by the s_deinitActive guard above.
+     */
+    if (g_HostHandle != NULL) {
+        USB_HostDeinit(g_HostHandle);
+        g_HostHandle = NULL;
+    }
+
+    /* Reset all instance state so init() can run cleanly again. */
+    s_deinitActive = false;
+    memset(&s_msdInstance, 0, sizeof(s_msdInstance));
     s_mounted = false;
     return kStorage_Success;
 }

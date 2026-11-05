@@ -186,8 +186,19 @@ static storage_status_t fatfs_sd_get_filesize(const char *path, size_t *size)
 
 static storage_status_t fatfs_sd_deinit(void)
 {
-    /* No explicit unmount API is used by this example; mark state so init()
-     * can be called again if desired. */
+    const TCHAR drive[3U] = {SDDISK + '0', ':', '/'};
+
+    if (!s_mounted)
+        return kStorage_Success;
+
+    /* Flush FatFs write-back cache and deregister the volume. Passing NULL
+     * as the FATFS pointer with a non-NULL path unmounts the drive and
+     * releases its slot in FatFs's internal volume table. */
+    f_unmount(drive);
+
+    /* Stop the USDHC peripheral and release the SD card. */
+    SD_Deinit(&g_sd);
+
     s_mounted = false;
     return kStorage_Success;
 }
